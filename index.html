@@ -2899,45 +2899,26 @@ var SubPages = {
       this.kpi('可能缺货', String(keneng), keneng > 0 ? 'up' : 'flat', keneng > 0 ? '紧急' : '无'),
     '</div>' +
 
-    '<div class="sp-chart-row">' +
-      '<div class="sp-chart-box"><div class="sp-chart-title">在途爆款GMV趋势</div><div class="sp-chart-canvas" id="trackingChart1"></div></div>' +
-      '<div class="sp-chart-box"><div class="sp-chart-title">爆款生命周期阶段</div><div class="sp-chart-canvas" id="trackingChart2"></div></div>' +
-    '</div>' +
-
     '<div class="sp-section">' +
-      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>在途爆款追踪</div>' +
+      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>风险预警</div>' +
       '<div class="sp-section-body">' +
-        '<table class="sp-table">' +
-          '<thead><tr><th>SKU</th><th>商品名称</th><th>生命周期阶段</th><th>上线天数</th><th>累计销量</th><th>累计GMV</th><th>日均销量</th><th>日均GMV</th><th>趋势</th><th>状态</th></tr></thead>' +
-          '<tbody>' +
-            '<tr><td class="col-id">BK-001</td><td>夏季冰丝防晒衣</td><td><span class="sp-tag green">成长期</span></td><td>28天</td><td>68,500</td><td class="col-money">¥3,425,000</td><td>3,250</td><td class="col-money">¥162,500</td><td class="trend-up">▲ 12%</td><td><span class="sp-tag green">正常</span></td></tr>' +
-            '<tr><td class="col-id">BK-002</td><td>便携折叠小风扇</td><td><span class="sp-tag green">成长期</span></td><td>21天</td><td>45,200</td><td class="col-money">¥1,808,000</td><td>2,890</td><td class="col-money">¥115,600</td><td class="trend-up">▲ 8%</td><td><span class="sp-tag green">正常</span></td></tr>' +
-            '<tr class="risk-row"><td class="col-id">BK-003</td><td>冰感凉感T恤</td><td><span class="sp-tag yellow">衰退期</span></td><td>56天</td><td>82,000</td><td class="col-money">¥3,280,000</td><td>2,150</td><td class="col-money">¥86,000</td><td class="trend-down">▼ 15%</td><td><span class="sp-tag red">⚠ 跌幅异常</span></td></tr>' +
-            '<tr><td class="col-id">BK-004</td><td>硅胶泳帽套装</td><td><span class="sp-tag blue">成熟期</span></td><td>42天</td><td>38,500</td><td class="col-money">¥770,000</td><td>1,890</td><td class="col-money">¥37,800</td><td class="trend-up">▲ 5%</td><td><span class="sp-tag green">正常</span></td></tr>' +
-            '<tr><td class="col-id">BK-005</td><td>速干运动短裤</td><td><span class="sp-tag blue">成熟期</span></td><td>35天</td><td>32,400</td><td class="col-money">¥1,296,000</td><td>1,560</td><td class="col-money">¥62,400</td><td class="trend-flat">— 0%</td><td><span class="sp-tag yellow">关注</span></td></tr>' +
-            '<tr><td class="col-id">BK-006</td><td>防晒冰袖臂套</td><td><span class="sp-tag green">成长期</span></td><td>14天</td><td>12,800</td><td class="col-money">¥384,000</td><td>914</td><td class="col-money">¥27,400</td><td class="trend-up">▲ 22%</td><td><span class="sp-tag green">正常</span></td></tr>' +
-            '<tr><td class="col-id">BK-007</td><td>儿童泳镜套装</td><td><span class="sp-tag blue">导入期</span></td><td>7天</td><td>2,100</td><td class="col-money">¥63,000</td><td>300</td><td class="col-money">¥9,000</td><td class="trend-up">▲ 35%</td><td><span class="sp-tag green">正常</span></td></tr>' +
-            '<tr><td class="col-id">BK-008</td><td>冰丝防晒面罩</td><td><span class="sp-tag blue">导入期</span></td><td>5天</td><td>980</td><td class="col-money">¥33,320</td><td>196</td><td class="col-money">¥6,664</td><td class="trend-up">▲ 45%</td><td><span class="sp-tag green">正常</span></td></tr>' +
-          '</tbody>' +
-        '</table>' +
+        '<div id="riskTableContainer">' + this._renderRiskTable() + '</div>' +
       '</div>' +
     '</div>' +
 
     '<div class="sp-section">' +
-      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>风控预警</div>' +
+      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>在途爆款追踪（符美玲 · 近30天TOP10）</div>' +
       '<div class="sp-section-body">' +
-        '<div class="sp-info-banner warn">' +
-          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>' +
-          'BK-003 冰感凉感T恤连续3天日销下跌超10%，已进入衰退期，建议评估清仓时机。' +
-        '</div>' +
         '<table class="sp-table">' +
-          '<thead><tr><th>SKU</th><th>预警类型</th><th>预警描述</th><th>触发时间</th><th>建议操作</th><th>状态</th></tr></thead>' +
-          '<tbody>' +
-            '<tr class="risk-row"><td class="col-id">BK-003</td><td>销量下跌</td><td>连续3天跌幅>10%</td><td>2026-08-08</td><td>评估清仓或降价</td><td><span class="sp-tag yellow">处理中</span></td></tr>' +
-            '<tr><td class="col-id">BK-005</td><td>增长停滞</td><td>连续5天零增长</td><td>2026-08-06</td><td>优化主图/标题</td><td><span class="sp-tag gray">观察中</span></td></tr>' +
-          '</tbody>' +
+          '<thead><tr><th style="width:50px">排名</th><th>商品名称</th><th>货品条码</th><th>近30天累计销量</th><th>货品状态</th></tr></thead>' +
+          '<tbody>' + top10Rows + '</tbody>' +
         '</table>' +
       '</div>' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;margin-top:16px;background:var(--card);border-radius:8px;font-size:13px;color:var(--muted)">' +
+      '<span>数据来源：飞书多维表格「商品库存在途数据表」，每周一自动同步</span>' +
+      '<span>更新时间：' + syncTime + '</span>' +
     '</div>';
   },
 

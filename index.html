@@ -3620,48 +3620,99 @@ var SubPages = {
 
   // ---------- 15. 定时触发任务面板 ----------
   page_schedule_task: function() {
-    return '' +
+    var tasks = [];
+    var updatedAt = '--';
+    if (window.FEISHU_DATA && FEISHU_DATA.scheduled_tasks) {
+      tasks = FEISHU_DATA.scheduled_tasks.tasks || [];
+      updatedAt = FEISHU_DATA.scheduled_tasks.updated_at || '--';
+    }
+
+    // KPI summary
+    var activeCount = tasks.filter(function(t){ return t.status === 'active'; }).length;
+    var totalExec = tasks.reduce(function(s, t){ return s + (t.executions || 0); }, 0);
+
+    var kpiHtml = '' +
     '<div class="sp-kpi-grid">' +
-      this.kpi('活跃任务', '8', 'flat', '正常'),
-      this.kpi('今日已执行', '12', 'up', '▲ 2次'),
-      this.kpi('执行成功率', '98.5%', 'up', '▲ 0.3%'),
-      this.kpi('平均耗时', '3.2s', 'down', '▼ 0.5s'),
-    '</div>' +
+      this.kpi('活跃任务', String(activeCount), 'flat', activeCount > 0 ? '正常运行' : '无任务') +
+      this.kpi('累计执行', String(totalExec), 'up', '共' + totalExec + '次') +
+      this.kpi('任务总数', String(tasks.length), 'flat', '已注册') +
+      this.kpi('数据更新', updatedAt, 'flat', '最后同步') +
+    '</div>';
 
+    // Task list table
+    var taskRows = '';
+    if (tasks.length === 0) {
+      taskRows = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">暂无定时任务数据，请执行同步</td></tr>';
+    } else {
+      for (var i = 0; i < tasks.length; i++) {
+        var t = tasks[i];
+        var statusTag = t.status === 'active'
+          ? '<span class="sp-tag green">运行中</span>'
+          : '<span class="sp-tag yellow">已暂停</span>';
+        var actionBtn = t.status === 'active'
+          ? '<button class="sp-btn danger" style="padding:2px 8px;font-size:11px" onclick="triggerScheduleTask(\'' + t.id + '\',\'' + t.name + '\')">立即执行</button>'
+          : '<span style="color:var(--muted);font-size:11px">已暂停</span>';
+        taskRows += '<tr>' +
+          '<td class="col-id">' + (t.id || '').substring(0, 12) + '</td>' +
+          '<td><strong>' + (t.name || '--') + '</strong></td>' +
+          '<td>' + (t.category || '--') + '</td>' +
+          '<td style="font-family:monospace;font-size:11px">' + (t.cron_desc || t.cron || '--') + '</td>' +
+          '<td>' + (t.next_run || '--') + '</td>' +
+          '<td>' + (t.last_run || '--') + '</td>' +
+          '<td>' + statusTag + '</td>' +
+          '<td>' + actionBtn + '</td>' +
+        '</tr>';
+      }
+    }
+
+    var taskTable = '' +
     '<div class="sp-section">' +
-      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>定时任务列表</div>' +
+      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>定时任务列表 <span style="font-size:11px;color:var(--muted);margin-left:8px">数据来源：TRAE Schedule 系统</span></div>' +
       '<div class="sp-section-body">' +
         '<table class="sp-table">' +
-          '<thead><tr><th>任务ID</th><th>任务名称</th><th>关联Skill</th><th>Cron表达式</th><th>下次执行</th><th>上次执行</th><th>状态</th><th>操作</th></tr></thead>' +
-          '<tbody>' +
-            '<tr><td class="col-id">SCH-001</td><td>每日销售快报生成</td><td>数据采集+报表</td><td>0 9 * * *</td><td>明日 09:00</td><td>今日 09:00</td><td><span class="sp-tag green">启用</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn danger" style="padding:2px 8px;font-size:11px">暂停</a></td></tr>' +
-            '<tr><td class="col-id">SCH-002</td><td>差评实时监控</td><td>差评检测</td><td>*/30 * * * *</td><td>30分钟后</td><td>30分钟前</td><td><span class="sp-tag green">启用</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn danger" style="padding:2px 8px;font-size:11px">暂停</a></td></tr>' +
-            '<tr><td class="col-id">SCH-003</td><td>滞销品周报</td><td>数据分析</td><td>0 10 * * 1</td><td>下周一 10:00</td><td>本周一 10:00</td><td><span class="sp-tag green">启用</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn danger" style="padding:2px 8px;font-size:11px">暂停</a></td></tr>' +
-            '<tr><td class="col-id">SCH-004</td><td>价格巡检</td><td>价格抓取</td><td>0 */4 * * *</td><td>2小时后</td><td>2小时前</td><td><span class="sp-tag yellow">暂停</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn primary" style="padding:2px 8px;font-size:11px">启用</a></td></tr>' +
-            '<tr><td class="col-id">SCH-005</td><td>竞品日报</td><td>竞品抓取</td><td>0 18 * * *</td><td>今日 18:00</td><td>昨日 18:00</td><td><span class="sp-tag green">启用</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn danger" style="padding:2px 8px;font-size:11px">暂停</a></td></tr>' +
-            '<tr><td class="col-id">SCH-006</td><td>库存预警检查</td><td>数据分析</td><td>0 8,20 * * *</td><td>今日 20:00</td><td>今日 08:00</td><td><span class="sp-tag green">启用</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn danger" style="padding:2px 8px;font-size:11px">暂停</a></td></tr>' +
-            '<tr><td class="col-id">SCH-007</td><td>毛利月报</td><td>数据计算</td><td>0 10 1 * *</td><td>下月1日</td><td>本月1日</td><td><span class="sp-tag green">启用</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn danger" style="padding:2px 8px;font-size:11px">暂停</a></td></tr>' +
-            '<tr><td class="col-id">SCH-008</td><td>推广费预警</td><td>数据监控</td><td>0 17 * * *</td><td>今日 17:00</td><td>昨日 17:00</td><td><span class="sp-tag green">启用</span></td><td><a class="sp-btn ghost" style="padding:2px 8px;font-size:11px">编辑</a> <a class="sp-btn danger" style="padding:2px 8px;font-size:11px">暂停</a></td></tr>' +
-          '</tbody>' +
-        '</table>' +
-      '</div>' +
-    '</div>' +
-
-    '<div class="sp-section">' +
-      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>执行日志</div>' +
-      '<div class="sp-section-body">' +
-        '<table class="sp-table">' +
-          '<thead><tr><th>时间</th><th>任务</th><th>耗时</th><th>结果</th><th>日志</th></tr></thead>' +
-          '<tbody>' +
-            '<tr><td>2026-08-10 09:00:02</td><td>每日销售快报</td><td>2.1s</td><td><span class="sp-tag green">成功</span></td><td>生成快报，推送飞书</td></tr>' +
-            '<tr><td>2026-08-10 08:00:05</td><td>价格巡检</td><td>5.2s</td><td><span class="sp-tag green">成功</span></td><td>发现2个异常价格</td></tr>' +
-            '<tr><td>2026-08-10 08:00:01</td><td>库存预警</td><td>1.5s</td><td><span class="sp-tag green">成功</span></td><td>1个SKU缺货预警</td></tr>' +
-            '<tr class="risk-row"><td>2026-08-09 18:00:03</td><td>竞品日报</td><td>3.8s</td><td><span class="sp-tag red">失败</span></td><td>竞品C-01页面结构变化，抓取失败</td></tr>' +
-            '<tr><td>2026-08-09 17:00:01</td><td>推广费预警</td><td>1.2s</td><td><span class="sp-tag green">成功</span></td><td>费比正常，无预警</td></tr>' +
-          '</tbody>' +
+          '<thead><tr><th>任务ID</th><th>任务名称</th><th>分类</th><th>执行时间</th><th>下次执行</th><th>上次执行</th><th>状态</th><th>操作</th></tr></thead>' +
+          '<tbody>' + taskRows + '</tbody>' +
         '</table>' +
       '</div>' +
     '</div>';
+
+    // Task detail cards
+    var detailCards = '';
+    for (var j = 0; j < tasks.length; j++) {
+      var tk = tasks[j];
+      detailCards += '' +
+      '<div style="background:var(--card-bg);border:1px solid var(--rule);border-radius:8px;padding:14px;margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+          '<strong style="font-size:14px">' + tk.name + '</strong>' +
+          (tk.status === 'active' ? '<span class="sp-tag green">运行中</span>' : '<span class="sp-tag yellow">已暂停</span>') +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">' + (tk.description || '') + '</div>' +
+        '<div style="display:flex;gap:16px;font-size:11px;color:var(--muted)">' +
+          '<span>Cron: <code style="background:var(--bg);padding:1px 4px;border-radius:3px">' + (tk.cron || '') + '</code></span>' +
+          '<span>累计执行: ' + (tk.executions || 0) + '次</span>' +
+          '<span>创建: ' + (tk.created || '--') + '</span>' +
+        '</div>' +
+        '<div style="margin-top:8px;display:flex;gap:6px">' +
+          '<button class="sp-btn primary" style="padding:3px 10px;font-size:11px" onclick="triggerScheduleTask(\'' + tk.id + '\',\'' + tk.name + '\')">立即执行</button>' +
+          '<button class="sp-btn ghost" style="padding:3px 10px;font-size:11px" onclick="showTaskDetail(\'' + tk.id + '\')">查看详情</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    var detailSection = '' +
+    '<div class="sp-section">' +
+      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>任务详情</div>' +
+      '<div class="sp-section-body">' + (detailCards || '<div style="text-align:center;color:var(--muted);padding:20px">暂无任务</div>') + '</div>' +
+    '</div>';
+
+    // Info banner
+    var infoBanner = '' +
+    '<div class="sp-info-banner info" style="margin-bottom:12px">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
+      '本面板展示 TRAE Schedule 系统中真实运行的定时任务。点击「立即执行」可在 TRAE 中触发对应任务。任务的新增、修改、暂停请在 TRAE 对话中操作。' +
+    '</div>';
+
+    return infoBanner + kpiHtml + taskTable + detailSection;
   },
 
   // ---------- 16. 网页数据抓取 Skill 库 ----------
@@ -6310,6 +6361,81 @@ function init() {
   initPrivacyBadge();
   initActivityTracking();
 }
+
+/* ---------- Scheduled Task Trigger (static page bridge) ---------- */
+function triggerScheduleTask(taskId, taskName) {
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = '' +
+    '<div style="background:var(--card-bg);border-radius:12px;padding:24px;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+        '<strong style="font-size:15px">立即执行：' + taskName + '</strong>' +
+      '</div>' +
+      '<div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">' +
+        '<div style="margin-bottom:8px">任务ID: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">' + taskId + '</code></div>' +
+        '<div style="margin-bottom:8px">此任务将在 TRAE 中立即触发执行。请在 TRAE 对话中发送以下指令：</div>' +
+        '<div style="background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:12px;font-size:12px;margin-bottom:12px;cursor:pointer" onclick="this.querySelector(\'input\').select();document.execCommand(\'copy\')">' +
+          '<input readonly value="触发定时任务：' + taskName + '" style="width:100%;border:none;background:none;color:var(--ink);font-size:12px;outline:none" />' +
+          '<div style="font-size:10px;color:var(--muted);margin-top:4px">点击复制指令</div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--muted)">执行后，任务会拉取飞书最新数据、处理并部署到 GitHub Pages。完成后刷新本页面即可查看最新数据。</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+        '<button class="sp-btn ghost" style="padding:6px 16px;font-size:12px" onclick="this.closest(\'div[style*=fixed]\').remove()">关闭</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.remove();
+  });
+}
+window.triggerScheduleTask = triggerScheduleTask;
+
+function showTaskDetail(taskId) {
+  if (!window.FEISHU_DATA || !FEISHU_DATA.scheduled_tasks) return;
+  var tasks = FEISHU_DATA.scheduled_tasks.tasks || [];
+  var task = null;
+  for (var i = 0; i < tasks.length; i++) {
+    if (tasks[i].id === taskId) { task = tasks[i]; break; }
+  }
+  if (!task) return;
+
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var statusBadge = task.status === 'active'
+    ? '<span style="background:#4caf50;color:white;padding:2px 8px;border-radius:4px;font-size:11px">运行中</span>'
+    : '<span style="background:#ff9800;color:white;padding:2px 8px;border-radius:4px;font-size:11px">已暂停</span>';
+
+  modal.innerHTML = '' +
+    '<div style="background:var(--card-bg);border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<strong style="font-size:15px">' + task.name + '</strong>' +
+        statusBadge +
+      '</div>' +
+      '<div style="font-size:13px;line-height:1.8;margin-bottom:16px">' +
+        '<div style="color:var(--muted);margin-bottom:6px">' + (task.description || '') + '</div>' +
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px">' +
+          '<span style="color:var(--muted)">任务ID</span><span><code style="background:var(--bg);padding:1px 4px;border-radius:3px;font-size:11px">' + task.id + '</code></span>' +
+          '<span style="color:var(--muted)">分类</span><span>' + (task.category || '--') + '</span>' +
+          '<span style="color:var(--muted)">Cron</span><span><code style="background:var(--bg);padding:1px 4px;border-radius:3px;font-size:11px">' + (task.cron || '--') + '</code></span>' +
+          '<span style="color:var(--muted)">执行时间</span><span>' + (task.cron_desc || '--') + '</span>' +
+          '<span style="color:var(--muted)">累计执行</span><span>' + (task.executions || 0) + ' 次</span>' +
+          '<span style="color:var(--muted)">上次执行</span><span>' + (task.last_run || '--') + '</span>' +
+          '<span style="color:var(--muted)">下次执行</span><span>' + (task.next_run || '--') + '</span>' +
+          '<span style="color:var(--muted)">创建时间</span><span>' + (task.created || '--') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+        '<button class="sp-btn ghost" style="padding:6px 16px;font-size:12px" onclick="this.closest(\'div[style*=fixed]\').remove()">关闭</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.remove();
+  });
+}
+window.showTaskDetail = showTaskDetail;
 
 function initSalesData() {
   try {

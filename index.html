@@ -6359,7 +6359,8 @@ function init() {
   initActivityTracking();
 }
 
-/* ---------- Scheduled Task Trigger (API + fallback) ---------- */
+/* ---------- Scheduled Task Trigger (GitHub Actions + Cloudflare + fallback) ---------- */
+var GITHUB_REPO = 'mimimi-linn/ecommerce-workbench';
 var SYNC_API_URL = 'https://ec-workbench-sync.loving-sled.workers.dev';
 var DEFAULT_API_KEY = 'ec_sync_1788427557_bddfdece';
 
@@ -6405,43 +6406,180 @@ function triggerScheduleTask(taskId, taskName) {
 
   // Check if task is the sync task
   if (taskId === '--ZG6359VH3UL7' || taskName.indexOf('同步') >= 0 || taskName.indexOf('数据') >= 0) {
-    // Execute via API
-    stepsEl.innerHTML = '步骤1: 连接飞书 API...';
+    // Execute via GitHub Actions (primary) + Cloudflare Worker (fallback)
+    stepsEl.innerHTML = '步骤1: 触发 GitHub Actions 同步任务...';
 
-    var apiKey = '';
-    try { apiKey = localStorage.getItem('ec_sync_api_key') || DEFAULT_API_KEY; } catch(e) { apiKey = DEFAULT_API_KEY; }
+    var ghToken = '';
+    try { ghToken = localStorage.getItem('ec_github_token') || ''; } catch(e) { ghToken = ''; }
+    
+    if (!ghToken) {
+      // No token configured, skip to Cloudflare Worker directly
+      stepsEl.innerHTML = '⚠️ 未配置 GitHub Token，尝试 Cloudflare Worker...';
+      tryCloudflareWorker();
+      return;
+    }
 
+    var workflowUrl = 'https://api.github.com/repos/' + GITHUB_REPO + '/actions/workflows/sync-data.yml/dispatches';
+    
     var controller = new AbortController();
-    var timeoutId = setTimeout(function() { controller.abort(); }, 120000);
+    var timeoutId = setTimeout(function() { controller.abort(); }, 30000);
 
-    fetch(SYNC_API_URL + '?action=sync', {
+    // Step 1: Trigger workflow
+    fetch(workflowUrl, {
       method: 'POST',
-      headers: { 'X-API-Key': apiKey },
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': 'token ' + ghToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ref: 'main' }),
       signal: controller.signal
     })
-    .then(function(resp) { return resp.json(); })
-    .then(function(data) {
-      if (data.ok) {
-        statusEl.style.display = 'none';
-        resultEl.innerHTML = '' +
-          '<div style="text-align:center;padding:8px 0">' +
-            '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" style="margin-bottom:8px"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' +
-            '<div style="font-size:14px;font-weight:600;margin-bottom:4px">同步成功</div>' +
-            '<div style="font-size:12px;color:var(--muted)">耗时: ' + data.elapsed + '</div>' +
-            '<div style="font-size:12px;color:var(--muted)">数据日期: ' + (data.data_date || '--') + '</div>' +
-            '<div style="font-size:12px;color:var(--muted)">负责人: ' + (data.owners || []).join(', ') + '</div>' +
-            '<div style="font-size:12px;color:var(--muted);margin-top:6px">请刷新页面查看最新数据</div>' +
-          '</div>';
-        resultEl.style.display = 'block';
-        closeBtn.style.display = 'inline-block';
-        closeBtn.textContent = '刷新页面';
-        closeBtn.className = 'sp-btn primary';
-        closeBtn.onclick = function() { location.reload(); };
+    .then(function(resp) {
+      if (resp.status === 204) {
+        // Workflow triggered successfully
+        stepsEl.innerHTML = '✅ 任务已触发，正在执行中（约 30-60 秒）...<br>步骤2: 等待同步完成...';
+        
+        // Poll for completion by checking the latest run
+        var pollCount = 0;
+        var maxPolls = 20;
+        var pollInterval = setInterval(function() {
+          pollCount++;
+          if (pollCount > maxPolls) {
+            clearInterval(pollInterval);
+            clearTimeout(timeoutId);
+            showSuccessWithDelay();
+            return;
+          }
+          
+          var runsUrl = 'https://api.github.com/repos/' + GITHUB_REPO + '/actions/runs?per_page=1&event=workflow_dispatch';
+          fetch(runsUrl, {
+            headers: {
+              'Accept': 'application/vnd.github.v3+json',
+              'Authorization': 'token ' + ghToken
+            }
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(runData) {
+            var runs = runData.workflow_runs || [];
+            if (runs.length > 0) {
+              var latest = runs[0];
+              stepsEl.innerHTML = '✅ 任务已触发，正在执行中...<br>步骤2: 状态 - ' + (latest.status === 'completed' ? '已完成' : latest.status) + 
+                (latest.conclusion ? ' (' + latest.conclusion + ')' : '');
+              
+              if (latest.status === 'completed') {
+                clearInterval(pollInterval);
+                clearTimeout(timeoutId);
+                if (latest.conclusion === 'success') {
+                  showSuccessResult(latest.html_url);
+                } else {
+                  showRunError('任务执行失败: ' + (latest.conclusion || 'unknown'), latest.html_url);
+                }
+              }
+            }
+          })
+          .catch(function() { /* ignore poll errors */ });
+        }, 3000);
+        
+      } else if (resp.status === 401 || resp.status === 403) {
+        throw new Error('GitHub Token 无效或无权限');
       } else {
-        throw new Error(data.error || '同步失败');
+        return resp.text().then(function(text) {
+          throw new Error('触发失败 (' + resp.status + '): ' + text.substring(0, 100));
+        });
       }
     })
     .catch(function(err) {
+      clearTimeout(timeoutId);
+      // Fallback: try Cloudflare Worker
+      stepsEl.innerHTML = '⚠️ GitHub API 不可用，尝试 Cloudflare Worker...';
+      tryCloudflareWorker();
+    });
+
+    function tryCloudflareWorker() {
+      var apiKey = '';
+      try { apiKey = localStorage.getItem('ec_sync_api_key') || DEFAULT_API_KEY; } catch(e) { apiKey = DEFAULT_API_KEY; }
+
+      fetch(SYNC_API_URL + '?action=sync', {
+        method: 'POST',
+        headers: { 'X-API-Key': apiKey }
+      })
+      .then(function(resp) { return resp.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          showDirectSuccess(data);
+        } else {
+          throw new Error(data.error || '同步失败');
+        }
+      })
+      .catch(function(cfErr) {
+        showFallbackInstructions(err);
+      });
+    }
+
+    function showSuccessResult(runUrl) {
+      statusEl.style.display = 'none';
+      resultEl.innerHTML = '' +
+        '<div style="text-align:center;padding:8px 0">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" style="margin-bottom:8px"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' +
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">同步成功</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">数据已更新到 GitHub Pages</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:6px">请刷新页面查看最新数据</div>' +
+        '</div>';
+      resultEl.style.display = 'block';
+      closeBtn.style.display = 'inline-block';
+      closeBtn.textContent = '刷新页面';
+      closeBtn.className = 'sp-btn primary';
+      closeBtn.onclick = function() { location.reload(); };
+    }
+
+    function showDirectSuccess(data) {
+      statusEl.style.display = 'none';
+      resultEl.innerHTML = '' +
+        '<div style="text-align:center;padding:8px 0">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" style="margin-bottom:8px"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' +
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">同步成功</div>' +
+          '<div style="font-size:12px;color:var(--muted)">耗时: ' + data.elapsed + '</div>' +
+          '<div style="font-size:12px;color:var(--muted)">数据日期: ' + (data.data_date || '--') + '</div>' +
+          '<div style="font-size:12px;color:var(--muted)">负责人: ' + (data.owners || []).join(', ') + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:6px">请刷新页面查看最新数据</div>' +
+        '</div>';
+      resultEl.style.display = 'block';
+      closeBtn.style.display = 'inline-block';
+      closeBtn.textContent = '刷新页面';
+      closeBtn.className = 'sp-btn primary';
+      closeBtn.onclick = function() { location.reload(); };
+    }
+
+    function showRunError(msg, runUrl) {
+      statusEl.style.display = 'none';
+      resultEl.innerHTML = '' +
+        '<div style="text-align:center;padding:8px 0">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#f44336" stroke-width="2" style="margin-bottom:8px"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' +
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px;color:#f44336">同步失败</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + msg + '</div>' +
+          (runUrl ? '<a href="' + runUrl + '" target="_blank" style="font-size:11px;color:var(--accent2)">查看执行详情 →</a>' : '') +
+        '</div>';
+      resultEl.style.display = 'block';
+      closeBtn.style.display = 'inline-block';
+    }
+
+    function showSuccessWithDelay() {
+      statusEl.style.display = 'none';
+      resultEl.innerHTML = '' +
+        '<div style="text-align:center;padding:8px 0">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ff9800" stroke-width="2" style="margin-bottom:8px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">任务执行中</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">任务已在后台启动，约 1 分钟后刷新页面查看结果</div>' +
+        '</div>';
+      resultEl.style.display = 'block';
+      closeBtn.style.display = 'inline-block';
+      closeBtn.textContent = '刷新页面';
+      closeBtn.className = 'sp-btn primary';
+      closeBtn.onclick = function() { location.reload(); };
+    }
+
+    function showFallbackInstructions(err) {
       statusEl.style.display = 'none';
       resultEl.innerHTML = '' +
         '<div style="text-align:center;padding:8px 0">' +
@@ -6456,7 +6594,7 @@ function triggerScheduleTask(taskId, taskName) {
         '</div>';
       resultEl.style.display = 'block';
       closeBtn.style.display = 'inline-block';
-    });
+    }
   } else {
     // Non-sync tasks: show instruction modal
     statusEl.innerHTML = '' +

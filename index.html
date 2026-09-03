@@ -1648,7 +1648,7 @@ var SubPages = {
           '<div class="chart-container" id="chartSales"></div>' +
         '</div>' +
         '<div class="chart-section">' +
-          '<div class="chart-section-title" id="top5Title">' + currentSalesOwner + ' - 当日爆款单品排行 TOP5</div>' +
+          '<div class="chart-section-title" id="top5Title">' + (window.currentSalesOwner || '符美玲') + ' - 当日爆款单品排行 TOP5</div>' +
           '<table class="product-table">' +
             '<thead><tr><th class="rank">#</th><th>商品名称</th><th>销量</th><th>金额</th><th>趋势</th><th>状态</th></tr></thead>' +
             '<tbody id="topProductsBody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">数据加载中...</td></tr></tbody>' +
@@ -5756,6 +5756,7 @@ function initSkills() {
 /* ---------- Sales Data Management ---------- */
 /* Feishu data integration: if FEISHU_DATA is available, use it for dashboard */
 var currentSalesOwner = '符美玲';
+window.currentSalesOwner = currentSalesOwner;
 
 function buildFeishuSalesData(owner) {
   if (!window.FEISHU_DATA) return null;
@@ -5861,6 +5862,7 @@ function buildFeishuSalesData(owner) {
 
 function filterSalesByOwner(owner) {
   currentSalesOwner = owner;
+  window.currentSalesOwner = owner;
   var newData = buildFeishuSalesData(owner);
   if (newData) {
     salesData = newData;
@@ -6285,6 +6287,7 @@ function initSalesData() {
     });
   }
 }
+window.initSalesData = initSalesData;
 
 function initPrivacyBadge() {
   var badge = document.getElementById('privacyBadge');

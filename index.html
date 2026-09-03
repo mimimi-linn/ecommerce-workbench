@@ -6248,6 +6248,11 @@ function init() {
 }
 
 function initSalesData() {
+  // Rebuild salesData from FEISHU_DATA if available (data loads async)
+  if (window.FEISHU_DATA && typeof buildFeishuSalesData === 'function') {
+    var newData = buildFeishuSalesData(currentSalesOwner);
+    if (newData) salesData = newData;
+  }
   initOwnerFilter();
   renderSalesKPIs();
   renderSalesChart();

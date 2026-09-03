@@ -1086,56 +1086,11 @@ select.dr-input option { background: var(--bg2); }
   <!-- ==================== Main Canvas ==================== -->
   <main class="canvas" id="canvas">
 
-    <!-- ========== Card 1: Sales Dashboard ========== -->
-    <section class="card" draggable="true" data-card="sales">
-      <div class="card-header">
-        <svg class="drag-dots" width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="3" r="1.3"/><circle cx="8" cy="3" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="13" r="1.3"/><circle cx="8" cy="13" r="1.3"/></svg>
-        <div class="card-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
-          电商销售实时数据看板
-        </div>
-        <div class="card-controls">
-          <button class="card-ctrl" onclick="toggleCard(this)" title="折叠/展开"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg></button>
-          <button class="card-ctrl fs-enter-btn" onclick="fullscreenCard(this)" title="全屏"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg></button><button class="card-ctrl fs-exit-btn" onclick="fullscreenCard(this)" title="退出全屏"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 01-2 2H3M21 8h-3a2 2 0 01-2-2V3M3 16h3a2 2 0 012 2v3M16 21v-3a2 2 0 012-2h3"/></svg></button>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="chart-section" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div class="owner-filter-wrap">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted);opacity:0.7"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <select id="ownerFilter" class="owner-filter-select" onchange="filterSalesByOwner(this.value)">
-                <option value="符美玲">符美玲</option>
-              </select>
-            </div>
-            <div class="chart-section-title" style="margin-bottom:0">数据更新时间: <span id="salesUpdatedAt" style="color:var(--ink)">--</span></div>
-          </div>
-          <div style="display:flex;gap:4px">
-            <button class="btn-icon-sm" onclick="exportSalesCSV()" title="导出销售数据CSV"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-            <button class="btn-icon-sm" onclick="document.getElementById('salesCsvInput').click()" title="导入销售数据CSV"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
-          </div>
-        </div>
-        <div class="kpi-grid" id="kpiGrid"></div>
-        <div class="chart-section">
-          <div class="chart-section-title">近7日销售额 & 毛利额趋势 <span id="feishuSyncBadge" style="font-size:10px;color:var(--accent2);margin-left:8px"></span></div>
-          <div class="chart-container" id="chartSales"></div>
-        </div>
-        <div class="chart-section">
-          <div class="chart-section-title">符美玲 - 当日爆款单品排行 TOP5</div>
-          <table class="product-table">
-            <thead>
-              <tr><th class="rank">#</th><th>商品名称</th><th>销量</th><th>金额</th><th>趋势</th><th>状态</th></tr>
-            </thead>
-            <tbody id="topProductsBody">
-              <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">数据加载中...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+    <!-- ========== Top Row: Todo (left) + Links (right) ========== -->
+    <div style="display:flex;gap:16px;align-items:flex-start">
 
-    <!-- ========== Card 2: Todo List ========== -->
-    <section class="card" draggable="true" data-card="todo">
+    <!-- ========== Card 1: Todo List ========== -->
+    <section class="card" draggable="true" data-card="todo" style="flex:1;min-width:0">
       <div class="card-header">
         <svg class="drag-dots" width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="3" r="1.3"/><circle cx="8" cy="3" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="13" r="1.3"/><circle cx="8" cy="13" r="1.3"/></svg>
         <div class="card-title">
@@ -1175,8 +1130,8 @@ select.dr-input option { background: var(--bg2); }
       </div>
     </section>
 
-    <!-- ========== Card 3: Quick Links ========== -->
-    <section class="card" draggable="true" data-card="links">
+    <!-- ========== Card 2: Quick Links ========== -->
+    <section class="card" draggable="true" data-card="links" style="flex:1;min-width:0">
       <div class="card-header">
         <svg class="drag-dots" width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="3" r="1.3"/><circle cx="8" cy="3" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="13" r="1.3"/><circle cx="8" cy="13" r="1.3"/></svg>
         <div class="card-title">
@@ -1193,7 +1148,9 @@ select.dr-input option { background: var(--bg2); }
       </div>
     </section>
 
-    <!-- ========== Card 4: AI Skills ========== -->
+    </div><!-- end top row -->
+
+    <!-- ========== Card 3: AI Skills ========== -->
     <section class="card" draggable="true" data-card="skills">
       <div class="card-header">
         <svg class="drag-dots" width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="3" r="1.3"/><circle cx="8" cy="3" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="13" r="1.3"/><circle cx="8" cy="13" r="1.3"/></svg>
@@ -1614,6 +1571,13 @@ var SubPages = {
     if (view === 'competitor-score') this.renderCompetitorChart();
     if (view === 'tracking-hot') this.renderTrackingChart();
     if (view === 'pending-test') this.ptAttachHandlers();
+    if (view === 'daily-report' && !this.drEditing) {
+      // Re-initialize sales dashboard charts after DOM injection
+      if (typeof initOwnerFilter !== 'undefined') initOwnerFilter._retryCount = 0;
+      if (typeof initSalesData === 'function') {
+        setTimeout(function() { initSalesData(); }, 50);
+      }
+    }
   },
 
   // ==================== Page Renderers ====================
@@ -1657,6 +1621,40 @@ var SubPages = {
     var trendArrow = function(t) { if(t==='up') return '▲'; if(t==='down') return '▼'; return '—'; };
 
     return '' +
+    // ===== 电商销售实时数据看板 =====
+    '<div class="sp-section">' +
+      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>电商销售实时数据看板</div>' +
+      '<div class="sp-section-body">' +
+        '<div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<div class="owner-filter-wrap" style="position:relative;display:inline-block">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted);opacity:0.7"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' +
+              '<select id="ownerFilter" class="owner-filter-select" onchange="filterSalesByOwner(this.value)">' +
+                '<option value="符美玲">符美玲</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="chart-section-title" style="margin-bottom:0">数据更新时间: <span id="salesUpdatedAt" style="color:var(--ink)">--</span></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:4px">' +
+            '<button class="btn-icon-sm" onclick="exportSalesCSV()" title="导出销售数据CSV"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
+            '<button class="btn-icon-sm" onclick="document.getElementById(\'salesCsvInput\').click()" title="导入销售数据CSV"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="kpi-grid" id="kpiGrid"></div>' +
+        '<div class="chart-section">' +
+          '<div class="chart-section-title">近7日销售额 & 毛利额趋势 <span id="feishuSyncBadge" style="font-size:10px;color:var(--accent2);margin-left:8px"></span></div>' +
+          '<div class="chart-container" id="chartSales"></div>' +
+        '</div>' +
+        '<div class="chart-section">' +
+          '<div class="chart-section-title">符美玲 - 当日爆款单品排行 TOP5</div>' +
+          '<table class="product-table">' +
+            '<thead><tr><th class="rank">#</th><th>商品名称</th><th>销量</th><th>金额</th><th>趋势</th><th>状态</th></tr></thead>' +
+            '<tbody id="topProductsBody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">数据加载中...</td></tr></tbody>' +
+          '</table>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
     // Date navigation
     '<div class="dr-date-nav">' +
       '<button class="sp-btn ghost" onclick="SubPages.drChangeDate(-1)">' +

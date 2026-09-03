@@ -2794,7 +2794,11 @@ var SubPages = {
   _riskPage: 0,
   _riskPageSize: 10,
   _riskFilter: 'all',
+  _riskSortKey: '',
+  _riskSortDir: '',  // 'asc' or 'desc' or ''
   _top10BrandFilter: 'all',
+  _otherShopSortKey: '',
+  _otherShopSortDir: '',
   _riskTypeColors: {
     '可能缺货': '#C62828',
     '采购预定': '#1565C0',
@@ -2806,6 +2810,57 @@ var SubPages = {
   _esc: function(s) {
     if (!s) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  },
+  _toNum: function(v) {
+    if (v === null || v === undefined || v === '' || v === '-' || v === 'None') return 0;
+    var n = parseFloat(String(v).replace(/,/g, '').trim());
+    return isNaN(n) ? 0 : n;
+  },
+  _sortData: function(data, key, dir) {
+    if (!key || !dir) return data;
+    var sorted = data.slice();
+    var self = this;
+    sorted.sort(function(a, b) {
+      var va = self._toNum(a[key]);
+      var vb = self._toNum(b[key]);
+      return dir === 'asc' ? va - vb : vb - va;
+    });
+    return sorted;
+  },
+  _renderSortTh: function(label, key, sortKey, sortDir, toggleFn) {
+    var isActive = sortKey === key;
+    var arrow = '';
+    if (isActive) {
+      arrow = sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
+    } else {
+      arrow = ' <span style="color:#ccc;font-size:10px">\u2195</span>';
+    }
+    var style = isActive ? 'color:#1565C0;cursor:pointer;font-weight:700' : 'cursor:pointer';
+    return '<th onclick="SubPages.' + toggleFn + '(\'' + key + '\')" style="' + style + '" title="点击排序">' + label + arrow + '</th>';
+  },
+  _toggleRiskSort: function(key) {
+    if (this._riskSortKey === key) {
+      if (this._riskSortDir === 'asc') this._riskSortDir = 'desc';
+      else if (this._riskSortDir === 'desc') { this._riskSortDir = ''; this._riskSortKey = ''; }
+      else this._riskSortDir = 'asc';
+    } else {
+      this._riskSortKey = key;
+      this._riskSortDir = 'desc';
+    }
+    this._riskPage = 0;
+    this._refreshRisk();
+  },
+  _toggleOtherShopSort: function(key) {
+    if (this._otherShopSortKey === key) {
+      if (this._otherShopSortDir === 'asc') this._otherShopSortDir = 'desc';
+      else if (this._otherShopSortDir === 'desc') { this._otherShopSortDir = ''; this._otherShopSortKey = ''; }
+      else this._otherShopSortDir = 'asc';
+    } else {
+      this._otherShopSortKey = key;
+      this._otherShopSortDir = 'desc';
+    }
+    this._otherShopPage = 0;
+    this._refreshOtherShop();
   },
   _getRiskTypeCounts: function() {
     var data = (window.FEISHU_DATA && FEISHU_DATA.inventory_risks) ? FEISHU_DATA.inventory_risks : [];
@@ -2857,6 +2912,7 @@ var SubPages = {
   },
   _renderRiskTable: function() {
     var data = this._getFilteredRisks();
+    data = this._sortData(data, this._riskSortKey, this._riskSortDir);
     var tabs = this._renderRiskFilterTabs();
     if (data.length === 0) {
       return tabs + '<div class="sp-info-banner" style="background:#e8f5e9;border:1px solid #4caf50;padding:16px;border-radius:8px;display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span style="color:#4caf50;font-weight:600">暂无风险预警，库存状态良好</span></div>';
@@ -2899,7 +2955,17 @@ var SubPages = {
       pagination = '<div style="margin-top:12px;font-size:13px;color:var(--muted)">共 ' + data.length + ' 条</div>';
     }
     return tabs + '<table class="sp-table" id="riskTable">' +
-      '<thead><tr><th>商品名称</th><th>货品条码</th><th>预警类型</th><th>可售天数</th><th>良品库存</th><th>在途</th><th>空港</th><th>采购预定</th><th>货品状态</th></tr></thead>' +
+      '<thead><tr>' +
+      '<th>商品名称</th>' +
+      '<th>货品条码</th>' +
+      '<th>预警类型</th>' +
+      this._renderSortTh('可售天数', 'stock_days', this._riskSortKey, this._riskSortDir, '_toggleRiskSort') +
+      this._renderSortTh('良品库存', 'good_stock', this._riskSortKey, this._riskSortDir, '_toggleRiskSort') +
+      this._renderSortTh('在途', 'on_the_way', this._riskSortKey, this._riskSortDir, '_toggleRiskSort') +
+      this._renderSortTh('空港', 'airport', this._riskSortKey, this._riskSortDir, '_toggleRiskSort') +
+      this._renderSortTh('采购预定', 'purchase', this._riskSortKey, this._riskSortDir, '_toggleRiskSort') +
+      '<th>货品状态</th>' +
+      '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
     '</table>' + pagination;
   },
@@ -3005,6 +3071,7 @@ var SubPages = {
   },
   _renderOtherShopTable: function() {
     var data = this._getFilteredOtherShop();
+    data = this._sortData(data, this._otherShopSortKey, this._otherShopSortDir);
     var brands = this._getOtherShopBrands();
     var totalAll = this._getOtherShopData().length;
     var brandFilter = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">' +
@@ -3058,7 +3125,16 @@ var SubPages = {
     }
 
     return brandFilter + '<table class="sp-table">' +
-      '<thead><tr><th>货品名称</th><th>品牌</th><th>条形码</th><th>7天日销</th><th>30天出库</th><th>良品库存</th><th>丸屋30天出库</th><th>提醒列内容</th></tr></thead>' +
+      '<thead><tr>' +
+      '<th>货品名称</th>' +
+      '<th>品牌</th>' +
+      '<th>条形码</th>' +
+      this._renderSortTh('7天日销', 'sales_7d', this._otherShopSortKey, this._otherShopSortDir, '_toggleOtherShopSort') +
+      this._renderSortTh('30天出库', 'outbound_30d', this._otherShopSortKey, this._otherShopSortDir, '_toggleOtherShopSort') +
+      this._renderSortTh('良品库存', 'good_stock', this._otherShopSortKey, this._otherShopSortDir, '_toggleOtherShopSort') +
+      this._renderSortTh('丸屋30天出库', 'maruya_30d', this._otherShopSortKey, this._otherShopSortDir, '_toggleOtherShopSort') +
+      '<th>提醒列内容</th>' +
+      '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
     '</table>' + pagination;
   },

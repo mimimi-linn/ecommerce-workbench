@@ -6359,33 +6359,116 @@ function init() {
   initActivityTracking();
 }
 
-/* ---------- Scheduled Task Trigger (static page bridge) ---------- */
+/* ---------- Scheduled Task Trigger (API + fallback) ---------- */
+var SYNC_API_URL = 'https://ec-workbench-sync.loving-sled.workers.dev';
+var DEFAULT_API_KEY = 'ec_sync_1788427557_bddfdece';
+
 function triggerScheduleTask(taskId, taskName) {
+  // Show progress modal
   var modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
   modal.innerHTML = '' +
-    '<div style="background:var(--card-bg);border-radius:12px;padding:24px;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">' +
+    '<div style="background:var(--card-bg);border-radius:12px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
         '<strong style="font-size:15px">立即执行：' + taskName + '</strong>' +
       '</div>' +
-      '<div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">' +
-        '<div style="margin-bottom:8px">任务ID: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">' + taskId + '</code></div>' +
-        '<div style="margin-bottom:8px">此任务将在 TRAE 中立即触发执行。请在 TRAE 对话中发送以下指令：</div>' +
-        '<div style="background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:12px;font-size:12px;margin-bottom:12px;cursor:pointer" onclick="this.querySelector(\'input\').select();document.execCommand(\'copy\')">' +
-          '<input readonly value="触发定时任务：' + taskName + '" style="width:100%;border:none;background:none;color:var(--ink);font-size:12px;outline:none" />' +
-          '<div style="font-size:10px;color:var(--muted);margin-top:4px">点击复制指令</div>' +
+      '<div id="syncStatus" style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+          '<div class="sync-spinner" style="width:14px;height:14px;border:2px solid var(--rule);border-top-color:var(--accent2);border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
+          '<span>正在执行同步...</span>' +
         '</div>' +
-        '<div style="font-size:11px;color:var(--muted)">执行后，任务会拉取飞书最新数据、处理并部署到 GitHub Pages。完成后刷新本页面即可查看最新数据。</div>' +
+        '<div id="syncSteps" style="font-size:11px;color:var(--muted);line-height:1.8;padding-left:22px"></div>' +
       '</div>' +
+      '<div id="syncResult" style="display:none;margin-bottom:16px"></div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end">' +
-        '<button class="sp-btn ghost" style="padding:6px 16px;font-size:12px" onclick="this.closest(\'div[style*=fixed]\').remove()">关闭</button>' +
+        '<button id="syncCloseBtn" class="sp-btn ghost" style="padding:6px 16px;font-size:12px;display:none" onclick="this.closest(\'div[style*=fixed]\').remove()">关闭</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(modal);
   modal.addEventListener('click', function(e) {
     if (e.target === modal) modal.remove();
   });
+
+  // Add spinner animation if not exists
+  if (!document.getElementById('syncSpinStyle')) {
+    var style = document.createElement('style');
+    style.id = 'syncSpinStyle';
+    style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(style);
+  }
+
+  var statusEl = modal.querySelector('#syncStatus');
+  var stepsEl = modal.querySelector('#syncSteps');
+  var resultEl = modal.querySelector('#syncResult');
+  var closeBtn = modal.querySelector('#syncCloseBtn');
+
+  // Check if task is the sync task
+  if (taskId === '--ZG6359VH3UL7' || taskName.indexOf('同步') >= 0 || taskName.indexOf('数据') >= 0) {
+    // Execute via API
+    stepsEl.innerHTML = '步骤1: 连接飞书 API...';
+
+    var apiKey = '';
+    try { apiKey = localStorage.getItem('ec_sync_api_key') || DEFAULT_API_KEY; } catch(e) { apiKey = DEFAULT_API_KEY; }
+
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 120000);
+
+    fetch(SYNC_API_URL + '?action=sync', {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey },
+      signal: controller.signal
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        statusEl.style.display = 'none';
+        resultEl.innerHTML = '' +
+          '<div style="text-align:center;padding:8px 0">' +
+            '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" style="margin-bottom:8px"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' +
+            '<div style="font-size:14px;font-weight:600;margin-bottom:4px">同步成功</div>' +
+            '<div style="font-size:12px;color:var(--muted)">耗时: ' + data.elapsed + '</div>' +
+            '<div style="font-size:12px;color:var(--muted)">数据日期: ' + (data.data_date || '--') + '</div>' +
+            '<div style="font-size:12px;color:var(--muted)">负责人: ' + (data.owners || []).join(', ') + '</div>' +
+            '<div style="font-size:12px;color:var(--muted);margin-top:6px">请刷新页面查看最新数据</div>' +
+          '</div>';
+        resultEl.style.display = 'block';
+        closeBtn.style.display = 'inline-block';
+        closeBtn.textContent = '刷新页面';
+        closeBtn.className = 'sp-btn primary';
+        closeBtn.onclick = function() { location.reload(); };
+      } else {
+        throw new Error(data.error || '同步失败');
+      }
+    })
+    .catch(function(err) {
+      statusEl.style.display = 'none';
+      resultEl.innerHTML = '' +
+        '<div style="text-align:center;padding:8px 0">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#f44336" stroke-width="2" style="margin-bottom:8px"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' +
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px;color:#f44336">API调用失败</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + (err.message || '网络错误') + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">请在 TRAE 对话中发送以下指令手动执行：</div>' +
+          '<div style="background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:8px;font-size:12px;cursor:pointer" onclick="this.querySelector(\'input\').select();document.execCommand(\'copy\')">' +
+            '<input readonly value="触发定时任务：' + taskName + '" style="width:100%;border:none;background:none;color:var(--ink);font-size:12px;outline:none" />' +
+            '<div style="font-size:10px;color:var(--muted);margin-top:4px">点击复制指令</div>' +
+          '</div>' +
+        '</div>';
+      resultEl.style.display = 'block';
+      closeBtn.style.display = 'inline-block';
+    });
+  } else {
+    // Non-sync tasks: show instruction modal
+    statusEl.innerHTML = '' +
+      '<div style="margin-bottom:8px">任务ID: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">' + taskId + '</code></div>' +
+      '<div style="margin-bottom:8px">此任务需要在 TRAE 中触发执行。请复制以下指令：</div>' +
+      '<div style="background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:12px;font-size:12px;margin-bottom:12px;cursor:pointer" onclick="this.querySelector(\'input\').select();document.execCommand(\'copy\')">' +
+        '<input readonly value="触发定时任务：' + taskName + '" style="width:100%;border:none;background:none;color:var(--ink);font-size:12px;outline:none" />' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px">点击复制指令</div>' +
+      '</div>';
+    closeBtn.style.display = 'inline-block';
+    closeBtn.textContent = '关闭';
+  }
 }
 window.triggerScheduleTask = triggerScheduleTask;
 

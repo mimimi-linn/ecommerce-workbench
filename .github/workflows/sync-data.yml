@@ -1,0 +1,44 @@
+name: Sync Feishu Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '触发原因'
+        required: false
+        default: 'manual trigger'
+  repository_dispatch:
+    types: [sync-data]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run sync script
+        env:
+          FEISHU_USER_TOKEN: ${{ secrets.FEISHU_USER_TOKEN }}
+        run: |
+          echo "=== 开始数据同步 ==="
+          node scripts/sync.js
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "没有数据变更，跳过提交"
+          else
+            git commit -m "Auto sync: $(date '+%Y-%m-%d %H:%M:%S' -d '+8 hours')"
+            git push
+            echo "数据已更新并推送"
+          fi

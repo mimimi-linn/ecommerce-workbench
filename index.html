@@ -6413,9 +6413,31 @@ function triggerScheduleTask(taskId, taskName) {
     try { ghToken = localStorage.getItem('ec_github_token') || ''; } catch(e) { ghToken = ''; }
     
     if (!ghToken) {
-      // No token configured, skip to Cloudflare Worker directly
-      stepsEl.innerHTML = '⚠️ 未配置 GitHub Token，尝试 Cloudflare Worker...';
-      tryCloudflareWorker();
+      // No token configured, show settings dialog
+      statusEl.style.display = 'none';
+      resultEl.innerHTML = '' +
+        '<div style="text-align:center;padding:8px 0">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2" style="margin-bottom:8px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' +
+          '<div style="font-size:14px;font-weight:600;margin-bottom:8px">需要配置 GitHub Token</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">一键执行需要 GitHub Personal Access Token 来触发同步任务。</div>' +
+          '<div style="background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:12px;margin-bottom:12px;text-align:left">' +
+            '<div style="font-size:11px;font-weight:600;margin-bottom:6px">配置步骤：</div>' +
+            '<div style="font-size:11px;color:var(--muted);line-height:1.8">' +
+              '1. 打开 <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" style="color:var(--accent2)">GitHub Token 生成页</a><br>' +
+              '2. 勾选 <code style="background:var(--rule);padding:1px 4px;border-radius:3px">repo</code> 权限<br>' +
+              '3. 点击 "Generate token" 生成并复制<br>' +
+              '4. 粘贴到下方输入框' +
+            '</div>' +
+          '</div>' +
+          '<input id="ghTokenInput" type="password" placeholder="粘贴 GitHub Token..." style="width:100%;padding:8px 12px;border:1px solid var(--rule);border-radius:8px;font-size:12px;background:var(--bg);color:var(--ink);margin-bottom:8px;box-sizing:border-box" />' +
+          '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Token 仅保存在浏览器本地，不会上传到任何服务器</div>' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+            '<button class="sp-btn primary" style="padding:6px 16px;font-size:12px" onclick="saveGhToken()">保存并执行</button>' +
+          '</div>' +
+        '</div>';
+      resultEl.style.display = 'block';
+      closeBtn.style.display = 'inline-block';
+      closeBtn.textContent = '关闭';
       return;
     }
 
@@ -6609,6 +6631,21 @@ function triggerScheduleTask(taskId, taskName) {
   }
 }
 window.triggerScheduleTask = triggerScheduleTask;
+
+function saveGhToken() {
+  var input = document.getElementById('ghTokenInput');
+  if (!input || !input.value.trim()) {
+    alert('请输入 GitHub Token');
+    return;
+  }
+  try { localStorage.setItem('ec_github_token', input.value.trim()); } catch(e) {}
+  // Close current modal and re-trigger
+  var modal = document.querySelector('div[style*="fixed"]');
+  if (modal) modal.remove();
+  // Re-trigger the sync
+  setTimeout(function() { triggerScheduleTask('--ZG6359VH3UL7', '飞书数据自动同步'); }, 100);
+}
+window.saveGhToken = saveGhToken;
 
 function showTaskDetail(taskId) {
   if (!window.FEISHU_DATA || !FEISHU_DATA.scheduled_tasks) return;

@@ -9,6 +9,8 @@ on:
         default: 'manual trigger'
   repository_dispatch:
     types: [sync-data]
+  schedule:
+    - cron: '45 6 * * MON-FRI'
 
 jobs:
   sync:

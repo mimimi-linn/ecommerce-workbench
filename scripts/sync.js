@@ -1,9 +1,9 @@
 // Sync script for GitHub Actions
 // Fetches Feishu data, processes it, and updates feishu-data-live.js
+// No external dependencies - uses only Node.js built-in modules
 
 const https = require('https');
 const fs = require('fs');
-const { execSync } = require('child_process');
 
 const BASE_TOKEN = "Yc1vbUbGAaayxdspPnQc3pmjn5d";
 const TABLES = {
@@ -66,7 +66,6 @@ function fetchJSON(url, options = {}) {
 async function fetchTableRecords(userToken, tableId, tableName) {
   const allRecords = [];
   let pageToken = '';
-  let fieldNames = null;
 
   while (true) {
     const params = new URLSearchParams({ page_size: '200' });
@@ -78,18 +77,14 @@ async function fetchTableRecords(userToken, tableId, tableName) {
     });
 
     if (data.code !== 0) {
-      console.error(`获取 ${tableName} 失败: ${data.msg} (code: ${data.code})`);
+      console.error(`  获取 ${tableName} 失败: ${data.msg} (code: ${data.code})`);
       if (data.code === 99991663 || data.code === 99991661 || data.code === 99991664) {
-        throw new Error('TOKEN_EXPIRED');
+        throw new Error('TOKEN_EXPIRED: ' + data.msg);
       }
       break;
     }
 
     const items = data.data.items || [];
-    if (fieldNames === null && items.length > 0) {
-      fieldNames = Object.keys(items[0].fields);
-    }
-
     for (const item of items) {
       const record = {};
       for (const [key, val] of Object.entries(item.fields)) {
@@ -104,7 +99,7 @@ async function fetchTableRecords(userToken, tableId, tableName) {
   }
 
   console.log(`  ${tableName}: ${allRecords.length} 条记录`);
-  return { records: allRecords, fields: fieldNames || [] };
+  return allRecords;
 }
 
 function processDashboard(dailyRecords) {
@@ -185,14 +180,14 @@ async function main() {
   for (const [key, table] of Object.entries(TABLES)) {
     console.log(`正在获取: ${table.name}`);
     try {
-      const result = await fetchTableRecords(userToken, table.id, table.name);
-      fetchData[key] = result;
+      fetchData[key] = await fetchTableRecords(userToken, table.id, table.name);
     } catch (e) {
-      if (e.message === 'TOKEN_EXPIRED') {
+      if (e.message.startsWith('TOKEN_EXPIRED')) {
         console.error('\n❌ Token 已过期，请重新授权飞书');
         process.exit(2);
       }
-      throw e;
+      console.error(`  获取失败: ${e.message}`);
+      fetchData[key] = [];
     }
   }
 
@@ -200,17 +195,17 @@ async function main() {
   console.log('\n=== 处理数据 ===');
   const processed = {};
   processed['sync_time'] = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-  Object.assign(processed, processDashboard(fetchData.daily_sales.records));
+  Object.assign(processed, processDashboard(fetchData.daily_sales));
 
   // Target summary
-  processed['target_summary_all'] = fetchData.target_summary.records.map(r => ({
+  processed['target_summary_all'] = fetchData.target_summary.map(r => ({
     owner: r['负责人'], month_target: num(r['月目标销售额']),
     month_actual: num(r['月已完成销售额']), daily_target: num(r['日目标销售额']),
   }));
 
   // Core links by person
   const linksByPerson = {};
-  for (const r of fetchData.core_links.records) {
+  for (const r of fetchData.core_links) {
     const owner = r['负责人'];
     if (!owner) continue;
     if (!linksByPerson[owner]) linksByPerson[owner] = [];
@@ -220,7 +215,7 @@ async function main() {
 
   // Inventory risks
   const riskItems = [];
-  for (const r of fetchData.inventory.records) {
+  for (const r of fetchData.inventory) {
     const stockDays = num(r['30天可售天数']);
     const onWay = num(r['在途']); const airport = num(r['空港']);
     const purchase = num(r['采购预定']); const goodStock = num(r['良品库存']);
@@ -233,7 +228,6 @@ async function main() {
     }
     if (goodStock > 0 && airport > 0 && maruyaSales === 0) reminders.push('新品/上架检查');
     
-    // 其他店铺销售不错 (西选、寰瑞、二马路、阿里健康)
     const otherStoreReminder = r['提醒列'] || '';
     if (otherStoreReminder && (
       otherStoreReminder.indexOf('西选') >= 0 ||
@@ -257,7 +251,7 @@ async function main() {
   console.log(`  库存风险项: ${riskItems.length} 条`);
 
   // Inventory TOP10
-  processed['inventory_top10'] = fetchData.inventory.records
+  processed['inventory_top10'] = fetchData.inventory
     .filter(r => r['丸屋负责人'] === '符美玲' && num(r['丸屋30天销量']) > 0)
     .map(r => ({
       name: r['商品名称'] || '', barcode: r['货品条码'] || '',
@@ -291,13 +285,11 @@ async function main() {
 
   // Write output
   const jsContent = `window.FEISHU_DATA = ${JSON.stringify(processed)};`;
-  const outputPath = process.env.OUTPUT_PATH || './feishu-data-live.js';
-  fs.writeFileSync(outputPath, jsContent, 'utf-8');
+  fs.writeFileSync('./feishu-data-live.js', jsContent, 'utf-8');
   
   console.log(`\n=== 同步完成 ===`);
   console.log(`  数据日期: ${processed.dashboard.data_date}`);
   console.log(`  负责人: ${Object.keys(processed.dashboard_by_owner).join(', ')}`);
-  console.log(`  输出文件: ${outputPath}`);
   console.log(`  文件大小: ${(jsContent.length / 1024).toFixed(1)} KB`);
 }
 

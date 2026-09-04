@@ -9,9 +9,6 @@ const BASE_TOKEN = "Yc1vbUbGAaayxdspPnQc3pmjn5d";
 const TABLES = {
   target_summary: { id: "tbl438GW0vARpaQI", name: "目标与达成汇总表" },
   daily_sales: { id: "tblHDDLJUm52B9rr", name: "观星台日销售数据" },
-  weekly_sales: { id: "tblbryEfRCJ0iM4B", name: "观星台周销售数据" },
-  core_links: { id: "tblzE439uGMx5MkN", name: "核心链接销售表" },
-  link_registry: { id: "tbl0KMizpvaaFuft", name: "小组链接登记表" },
   inventory: { id: "tbl1HnZaiTgPJG1C", name: "商品库存在途数据表" }
 };
 
@@ -21,6 +18,17 @@ function num(val) {
   const s = String(val).replace(/,/g, '').replace(/¥/g, '').replace(/%/g, '').trim();
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
+}
+
+function tsToDate(ts) {
+  if (!ts) return '';
+  let ms = typeof ts === 'number' ? ts : parseInt(ts);
+  if (ms < 1e12) ms *= 1000;
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function normalizeValue(val) {
@@ -90,6 +98,10 @@ async function fetchTableRecords(userToken, tableId, tableName) {
       for (const [key, val] of Object.entries(item.fields)) {
         record[key] = normalizeValue(val);
       }
+      // Keep original timestamp for date fields
+      if (item.fields['数据日期'] && typeof item.fields['数据日期'] === 'number') {
+        record['数据日期'] = tsToDate(item.fields['数据日期']);
+      }
       record._record_id = item.record_id;
       allRecords.push(record);
     }
@@ -102,21 +114,36 @@ async function fetchTableRecords(userToken, tableId, tableName) {
   return allRecords;
 }
 
-function processDashboard(dailyRecords) {
-  const byOwner = {};
-  const owners = new Set();
+function processDashboard(dailyRecords, targetRecords) {
+  // Parse target summary - extract owner from person field
+  const targetMap = {};
+  for (const r of targetRecords) {
+    const owner = r['监控维度 (人员 )'] || r['负责人'] || '';
+    if (!owner) continue;
+    targetMap[owner] = {
+      target_sales: num(r['目标销售']),
+      target_profit: num(r['目标毛利']),
+      actual_sales: num(r['实际销售']),
+      actual_profit: num(r['实际毛利']),
+      ad_cost: num(r['推广费用']),
+      sales_rate: num(r['销售达成率']),
+      profit_rate: num(r['毛利达成率（%）'])
+    };
+  }
 
+  const owners = Object.keys(targetMap);
+  const byOwner = {};
+  
   for (const r of dailyRecords) {
     const owner = r['负责人'];
     if (!owner) continue;
-    owners.add(owner);
     if (!byOwner[owner]) byOwner[owner] = [];
     byOwner[owner].push(r);
   }
 
   const dashboardByOwner = {};
   for (const owner of owners) {
-    const records = byOwner[owner].sort((a, b) => {
+    const records = (byOwner[owner] || []).sort((a, b) => {
       return String(b['数据日期'] || '').localeCompare(String(a['数据日期'] || ''));
     });
     if (records.length === 0) continue;
@@ -124,45 +151,82 @@ function processDashboard(dailyRecords) {
     const latest = records[0];
     const dataDate = String(latest['数据日期'] || '').substring(0, 10);
 
-    const actualSales = num(latest['日销售额']);
-    const actualProfit = num(latest['日毛利额']);
-    const targetSales = num(latest['日目标销售额']);
-    const achievementRate = targetSales > 0 ? (actualSales / targetSales * 100) : 0;
-    const feeRatio = actualSales > 0 ? (actualProfit / actualSales * 100) : 0;
+    // Sum all products for this owner on the latest date
+    const dailySales = records.reduce((s, r) => s + num(r['支付金额']), 0);
+    const dailyProfit = records.reduce((s, r) => s + num(r['商品毛利_预估']), 0);
+    const dailyAdCost = records.reduce((s, r) => s + num(r['推广费小计(未计算补贴)']), 0);
+    const dailySalesCount = records.reduce((s, r) => s + num(r['销量']), 0);
+    const dailyRefund = records.reduce((s, r) => s + num(r['退款金额']), 0);
+    
+    const target = targetMap[owner] || {};
+    const targetSales = target.target_sales || 0;
+    const targetProfit = target.target_profit || 0;
+    
+    const achievementRate = targetSales > 0 ? (dailySales / targetSales * 100) : 0;
+    const profitRate = targetProfit > 0 ? (dailyProfit / targetProfit * 100) : 0;
+    const feeRatio = dailySales > 0 ? (dailyAdCost / dailySales * 100) : 0;
+    const margin = dailySales > 0 ? (dailyProfit / dailySales * 100) : 0;
 
+    // Top 5 products by sales
     const productMap = {};
-    for (const r of records.slice(0, 7)) {
-      const pname = r['商品名称'];
+    for (const r of records.slice(0, 50)) {
+      const pname = r['商品标题'] || r['商品名称'];
       if (!pname) continue;
-      if (!productMap[pname]) productMap[pname] = { name: pname, sales: 0, amount: 0, barcode: r['货品条码'] || '' };
-      productMap[pname].sales += num(r['日销量']);
-      productMap[pname].amount += num(r['日销售额']);
+      if (!productMap[pname]) productMap[pname] = { name: pname, sales: 0, amount: 0, barcode: r['条形码'] || r['货品条码'] || '' };
+      productMap[pname].sales += num(r['销量']);
+      productMap[pname].amount += num(r['支付金额']);
     }
     const top5 = Object.values(productMap).sort((a, b) => b.sales - a.sales).slice(0, 5);
 
+    // 7-day trend
+    const dailyAgg = {};
+    for (const r of (byOwner[owner] || [])) {
+      const dt = String(r['数据日期'] || '').substring(0, 10);
+      if (!dt || dt === 'None') continue;
+      if (!dailyAgg[dt]) dailyAgg[dt] = { sales: 0, profit: 0 };
+      dailyAgg[dt].sales += num(r['支付金额']);
+      dailyAgg[dt].profit += num(r['商品毛利_预估']);
+    }
+    const sortedDates = Object.keys(dailyAgg).sort();
+    const recent7d = sortedDates.slice(-7);
+    const trend7d = recent7d.map(dt => ({
+      date: dt.substring(5),
+      sales: Math.round(dailyAgg[dt].sales),
+      profit: Math.round(dailyAgg[dt].profit)
+    }));
+
     dashboardByOwner[owner] = {
       data_date: dataDate,
-      actual_sales: Math.round(actualSales),
-      actual_profit: Math.round(actualProfit),
+      actual_sales: Math.round(dailySales),
+      actual_profit: Math.round(dailyProfit),
       target_sales: Math.round(targetSales),
+      target_profit: Math.round(targetProfit),
       achievement_rate: Math.round(achievementRate * 10) / 10,
+      profit_rate: Math.round(profitRate * 10) / 10,
       fee_ratio: Math.round(feeRatio * 10) / 10,
+      margin: Math.round(margin * 10) / 10,
+      ad_cost: Math.round(dailyAdCost),
+      refund: Math.round(dailyRefund),
+      sales_count: Math.round(dailySalesCount),
       top5_products: top5,
-      total_orders: num(latest['日订单量']),
-      total_visitors: num(latest['日访客数']),
-      conversion_rate: num(latest['日支付转化率'])
+      trend_7d: trend7d
     };
   }
 
-  const firstOwner = Array.from(owners)[0];
+  const firstOwner = owners.find(o => dashboardByOwner[o]) || owners[0];
   return {
-    dashboard: dashboardByOwner[firstOwner] || { data_date: '--', actual_sales: 0, actual_profit: 0, target_sales: 0, achievement_rate: 0, fee_ratio: 0, top5_products: [], total_orders: 0, total_visitors: 0, conversion_rate: 0 },
+    dashboard: dashboardByOwner[firstOwner] || { data_date: '--', actual_sales: 0, actual_profit: 0, target_sales: 0, achievement_rate: 0, fee_ratio: 0, top5_products: [], trend_7d: [] },
     dashboard_by_owner: dashboardByOwner,
-    trend_7d: dashboardByOwner[firstOwner] ? {
-      days: byOwner[firstOwner].slice(0, 7).reverse().map(r => String(r['数据日期'] || '').substring(5, 10)),
-      sales: byOwner[firstOwner].slice(0, 7).reverse().map(r => num(r['日销售额'])),
-      profit: byOwner[firstOwner].slice(0, 7).reverse().map(r => num(r['日毛利额']))
-    } : { days: [], sales: [], profit: [] }
+    target_summary_all: owners.map(o => ({
+      owner: o,
+      target_sales: targetMap[o].target_sales,
+      target_profit: targetMap[o].target_profit,
+      actual_sales: targetMap[o].actual_sales,
+      actual_profit: targetMap[o].actual_profit,
+      ad_cost: targetMap[o].ad_cost,
+      sales_rate: targetMap[o].sales_rate,
+      profit_rate: targetMap[o].profit_rate
+    }))
   };
 }
 
@@ -195,23 +259,9 @@ async function main() {
   console.log('\n=== 处理数据 ===');
   const processed = {};
   processed['sync_time'] = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-  Object.assign(processed, processDashboard(fetchData.daily_sales));
-
-  // Target summary
-  processed['target_summary_all'] = fetchData.target_summary.map(r => ({
-    owner: r['负责人'], month_target: num(r['月目标销售额']),
-    month_actual: num(r['月已完成销售额']), daily_target: num(r['日目标销售额']),
-  }));
-
-  // Core links by person
-  const linksByPerson = {};
-  for (const r of fetchData.core_links) {
-    const owner = r['负责人'];
-    if (!owner) continue;
-    if (!linksByPerson[owner]) linksByPerson[owner] = [];
-    linksByPerson[owner].push({ name: r['商品名称'], sales: num(r['日销量']), amount: num(r['日销售额']) });
-  }
-  processed['core_links_by_person'] = linksByPerson;
+  
+  const dashboardData = processDashboard(fetchData.daily_sales, fetchData.target_summary);
+  Object.assign(processed, dashboardData);
 
   // Inventory risks
   const riskItems = [];
@@ -228,23 +278,29 @@ async function main() {
     }
     if (goodStock > 0 && airport > 0 && maruyaSales === 0) reminders.push('新品/上架检查');
     
-    const otherStoreReminder = r['提醒列'] || '';
-    if (otherStoreReminder && (
-      otherStoreReminder.indexOf('西选') >= 0 ||
-      otherStoreReminder.indexOf('寰瑞') >= 0 ||
-      otherStoreReminder.indexOf('二马路') >= 0 ||
-      otherStoreReminder.indexOf('阿里健康') >= 0
+    const reminderText = r['提醒'] || r['提醒列'] || '';
+    if (reminderText && (
+      reminderText.indexOf('西选') >= 0 ||
+      reminderText.indexOf('寰瑞') >= 0 ||
+      reminderText.indexOf('二马路') >= 0 ||
+      reminderText.indexOf('阿里健康') >= 0
     )) {
       if (!reminders.includes('其他店铺销售不错')) reminders.push('其他店铺销售不错');
     }
     
     if (reminders.length > 0) riskItems.push({
-      product_name: r['商品名称'] || '', barcode: r['货品条码'] || '', brand: r['品牌'] || '',
-      good_stock: String(r['良品库存'] || ''), stock_days: String(r['30天可售天数'] || ''),
-      airport: String(r['空港'] || ''), on_the_way: String(r['在途'] || ''),
-      reminders: reminders.join('；'), types: reminders, owner: r['丸屋负责人'] || '',
+      product_name: r['货品名称'] || r['商品名称'] || '', 
+      barcode: r['条形码'] || r['货品条码'] || '', 
+      brand: r['品牌'] || '',
+      good_stock: String(r['良品库存'] || ''), 
+      stock_days: String(r['30天可售天数'] || ''),
+      airport: String(r['空港'] || ''), 
+      on_the_way: String(r['在途'] || ''),
+      reminders: reminders.join('；'), 
+      types: reminders, 
+      owner: r['丸屋负责人'] || '',
       maruya_30d_sales: String(r['丸屋30天销量'] || ''),
-      other_store_reminder: otherStoreReminder
+      other_store_reminder: reminderText
     });
   }
   processed['inventory_risks'] = riskItems;
@@ -254,9 +310,12 @@ async function main() {
   processed['inventory_top10'] = fetchData.inventory
     .filter(r => r['丸屋负责人'] === '符美玲' && num(r['丸屋30天销量']) > 0)
     .map(r => ({
-      name: r['商品名称'] || '', barcode: r['货品条码'] || '',
-      sales_30d: num(r['丸屋30天销量']), good_stock: String(r['良品库存'] || ''),
-      stock_days: String(r['30天可售天数'] || ''), airport: String(r['空港'] || ''),
+      name: r['货品名称'] || r['商品名称'] || '', 
+      barcode: r['条形码'] || r['货品条码'] || '',
+      sales_30d: num(r['丸屋30天销量']), 
+      good_stock: String(r['良品库存'] || ''),
+      stock_days: String(r['30天可售天数'] || ''), 
+      airport: String(r['空港'] || ''),
       status: String(r['货品状态'] || '')
     }))
     .sort((a, b) => b.sales_30d - a.sales_30d).slice(0, 10);

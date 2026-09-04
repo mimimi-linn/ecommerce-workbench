@@ -1,10 +1,12 @@
 // Sync script for GitHub Actions
-// Fetches Feishu data, processes it, and updates feishu-data-live.js
+// Uses App credentials (tenant_access_token) - no token refresh needed!
 // No external dependencies - uses only Node.js built-in modules
 
 const https = require('https');
 const fs = require('fs');
 
+const APP_ID = "cli_aac130aabb799bb3";
+const APP_SECRET = process.env.FEISHU_APP_SECRET || "6uYLfShxUfygGRxpBUGZhbIxJX4yHOSa";
 const BASE_TOKEN = "Yc1vbUbGAaayxdspPnQc3pmjn5d";
 const TABLES = {
   target_summary: { id: "tbl438GW0vARpaQI", name: "目标与达成汇总表" },
@@ -71,7 +73,21 @@ function fetchJSON(url, options = {}) {
   });
 }
 
-async function fetchTableRecords(userToken, tableId, tableName) {
+async function getTenantAccessToken() {
+  console.log('获取 tenant_access_token...');
+  const data = await fetchJSON('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET })
+  });
+  if (data.code !== 0) {
+    throw new Error(`获取 token 失败: ${data.msg} (code: ${data.code})`);
+  }
+  console.log(`  ✅ Token 获取成功，有效期 ${data.expire} 秒`);
+  return data.tenant_access_token;
+}
+
+async function fetchTableRecords(token, tableId, tableName) {
   const allRecords = [];
   let pageToken = '';
 
@@ -81,14 +97,11 @@ async function fetchTableRecords(userToken, tableId, tableName) {
 
     const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${BASE_TOKEN}/tables/${tableId}/records?${params}`;
     const data = await fetchJSON(url, {
-      headers: { 'Authorization': `Bearer ${userToken}` }
+      headers: { 'Authorization': `Bearer ${token}` }
     });
 
     if (data.code !== 0) {
       console.error(`  获取 ${tableName} 失败: ${data.msg} (code: ${data.code})`);
-      if (data.code === 99991663 || data.code === 99991661 || data.code === 99991664) {
-        throw new Error('TOKEN_EXPIRED: ' + data.msg);
-      }
       break;
     }
 
@@ -98,7 +111,6 @@ async function fetchTableRecords(userToken, tableId, tableName) {
       for (const [key, val] of Object.entries(item.fields)) {
         record[key] = normalizeValue(val);
       }
-      // Keep original timestamp for date fields
       if (item.fields['数据日期'] && typeof item.fields['数据日期'] === 'number') {
         record['数据日期'] = tsToDate(item.fields['数据日期']);
       }
@@ -115,7 +127,6 @@ async function fetchTableRecords(userToken, tableId, tableName) {
 }
 
 function processDashboard(dailyRecords, targetRecords) {
-  // Parse target summary - extract owner from person field
   const targetMap = {};
   for (const r of targetRecords) {
     const owner = r['监控维度 (人员 )'] || r['负责人'] || '';
@@ -151,7 +162,6 @@ function processDashboard(dailyRecords, targetRecords) {
     const latest = records[0];
     const dataDate = String(latest['数据日期'] || '').substring(0, 10);
 
-    // Sum all products for this owner on the latest date
     const dailySales = records.reduce((s, r) => s + num(r['支付金额']), 0);
     const dailyProfit = records.reduce((s, r) => s + num(r['商品毛利_预估']), 0);
     const dailyAdCost = records.reduce((s, r) => s + num(r['推广费小计(未计算补贴)']), 0);
@@ -167,7 +177,6 @@ function processDashboard(dailyRecords, targetRecords) {
     const feeRatio = dailySales > 0 ? (dailyAdCost / dailySales * 100) : 0;
     const margin = dailySales > 0 ? (dailyProfit / dailySales * 100) : 0;
 
-    // Top 5 products by sales
     const productMap = {};
     for (const r of records.slice(0, 50)) {
       const pname = r['商品标题'] || r['商品名称'];
@@ -178,7 +187,6 @@ function processDashboard(dailyRecords, targetRecords) {
     }
     const top5 = Object.values(productMap).sort((a, b) => b.sales - a.sales).slice(0, 5);
 
-    // 7-day trend
     const dailyAgg = {};
     for (const r of (byOwner[owner] || [])) {
       const dt = String(r['数据日期'] || '').substring(0, 10);
@@ -231,31 +239,24 @@ function processDashboard(dailyRecords, targetRecords) {
 }
 
 async function main() {
-  const userToken = process.env.FEISHU_USER_TOKEN;
-  if (!userToken) {
-    console.error('ERROR: FEISHU_USER_TOKEN not set');
-    process.exit(1);
-  }
+  console.log('=== 开始同步飞书数据（App 凭证模式）===\n');
 
-  console.log('=== 开始同步飞书数据 ===\n');
+  // Step 1: Get tenant_access_token (永不过期方案)
+  const token = await getTenantAccessToken();
 
-  // Fetch all tables
+  // Step 2: Fetch all tables
   const fetchData = {};
   for (const [key, table] of Object.entries(TABLES)) {
-    console.log(`正在获取: ${table.name}`);
+    console.log(`\n正在获取: ${table.name}`);
     try {
-      fetchData[key] = await fetchTableRecords(userToken, table.id, table.name);
+      fetchData[key] = await fetchTableRecords(token, table.id, table.name);
     } catch (e) {
-      if (e.message.startsWith('TOKEN_EXPIRED')) {
-        console.error('\n❌ Token 已过期，请重新授权飞书');
-        process.exit(2);
-      }
       console.error(`  获取失败: ${e.message}`);
       fetchData[key] = [];
     }
   }
 
-  // Process data
+  // Step 3: Process data
   console.log('\n=== 处理数据 ===');
   const processed = {};
   processed['sync_time'] = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
@@ -321,7 +322,7 @@ async function main() {
     .sort((a, b) => b.sales_30d - a.sales_30d).slice(0, 10);
   console.log(`  在途爆款TOP10: ${processed['inventory_top10'].length} 条`);
 
-  // Other store sales comparison
+  // Other store sales
   processed['other_store_sales'] = riskItems
     .filter(r => r.types && r.types.includes('其他店铺销售不错'))
     .map(r => ({

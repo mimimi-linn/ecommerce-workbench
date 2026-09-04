@@ -29,9 +29,9 @@ jobs:
 
       - name: Run sync script
         env:
-          FEISHU_USER_TOKEN: ${{ secrets.FEISHU_USER_TOKEN }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
         run: |
-          echo "=== 开始数据同步 ==="
+          echo "=== 开始数据同步（App 凭证模式）==="
           node scripts/sync.js
 
       - name: Commit and push changes

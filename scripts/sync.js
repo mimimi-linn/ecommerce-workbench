@@ -11,7 +11,8 @@ const BASE_TOKEN = "Yc1vbUbGAaayxdspPnQc3pmjn5d";
 const TABLES = {
   target_summary: { id: "tbl438GW0vARpaQI", name: "目标与达成汇总表" },
   daily_sales: { id: "tblHDDLJUm52B9rr", name: "观星台日销售数据" },
-  inventory: { id: "tbl1HnZaiTgPJG1C", name: "商品库存在途数据表" }
+  inventory: { id: "tbl1HnZaiTgPJG1C", name: "商品库存在途数据表" },
+  promo_data: { id: "tblxz2yjCR5jRYqQ", name: "小组推广数据" }
 };
 
 function num(val) {
@@ -332,6 +333,120 @@ async function main() {
       maruya_30d: num(r.maruya_30d_sales)
     }));
   console.log(`  其他店铺销售不错: ${processed['other_store_sales'].length} 条`);
+
+  // Promotion quality data
+  const promoRecords = fetchData.promo_data || [];
+  const promoItems = [];
+  let totalImpressions = 0, totalClicks = 0, totalSpend = 0, totalSales = 0;
+  let goodCount = 0, needOptimizeCount = 0;
+  let ctrSum = 0, roiSum = 0, cpcSum = 0, convSum = 0;
+  
+  for (const r of promoRecords) {
+    const subjectName = r['推广主体名称'] || r['商品名称'] || '';
+    if (!subjectName || subjectName === '合计' || subjectName === '总计') continue;
+    const impressions = num(r['展现量']);
+    const clicks = num(r['点击量']);
+    const spend = num(r['花费']);
+    const roi = num(r['投入产出比']);
+    const totalSalesVal = num(r['成交金额']);
+    
+    // 跳过无数据行
+    if (impressions === 0 && clicks === 0 && spend === 0) continue;
+    
+    // CTR - 可能是百分比字符串或小数
+    let ctr = num(r['点击率']);
+    if (ctr < 1 && String(r['点击率'] || '').includes('%')) ctr = ctr * 100;
+    if (ctr < 1 && impressions > 0) ctr = (clicks / impressions) * 100;
+    
+    // CPC
+    let cpc = num(r['平均点击花费']);
+    if (cpc === 0 && clicks > 0) cpc = spend / clicks;
+    
+    // 转化率
+    let convRate = num(r['转化率']);
+    if (convRate < 1 && String(r['转化率'] || '').includes('%')) convRate = convRate * 100;
+    if (convRate === 0 && clicks > 0) {
+      const orderCount = num(r['成交笔数'] || r['成交订单数'] || 0);
+      if (orderCount > 0) convRate = (orderCount / clicks) * 100;
+    }
+    
+    const owner = r['负责人'] || r['所属小组'] || '';
+    
+    // 质检评级
+    let qualityStatus, qualityTag;
+    if (roi >= 5 && ctr >= 3) {
+      qualityStatus = '优质'; qualityTag = 'green'; goodCount++;
+    } else if (roi >= 3 && ctr >= 2) {
+      qualityStatus = '正常'; qualityTag = 'green'; goodCount++;
+    } else if (roi >= 1.5 && ctr >= 1.5) {
+      qualityStatus = '关注'; qualityTag = 'yellow';
+    } else {
+      qualityStatus = '待优化'; qualityTag = 'red'; needOptimizeCount++;
+    }
+    
+    promoItems.push({
+      subject_name: subjectName,
+      owner: owner,
+      impressions: impressions,
+      clicks: clicks,
+      ctr: Math.round(ctr * 100) / 100,
+      spend: Math.round(spend * 100) / 100,
+      cpc: Math.round(cpc * 100) / 100,
+      roi: Math.round(roi * 100) / 100,
+      conv_rate: Math.round(convRate * 100) / 100,
+      total_sales: Math.round(totalSalesVal * 100) / 100,
+      quality_status: qualityStatus,
+      quality_tag: qualityTag
+    });
+    
+    totalImpressions += impressions;
+    totalClicks += clicks;
+    totalSpend += spend;
+    totalSales += totalSalesVal;
+    if (ctr > 0) ctrSum += ctr;
+    if (roi > 0) roiSum += roi;
+    if (cpc > 0) cpcSum += cpc;
+    if (convRate > 0) convSum += convRate;
+  }
+  
+  // 按花费降序
+  promoItems.sort((a, b) => b.spend - a.spend);
+  
+  const validCount = promoItems.length;
+  const avgCtr = validCount > 0 ? Math.round((ctrSum / validCount) * 100) / 100 : 0;
+  const avgRoi = validCount > 0 ? Math.round((roiSum / validCount) * 100) / 100 : 0;
+  const avgCpc = validCount > 0 ? Math.round((cpcSum / validCount) * 100) / 100 : 0;
+  const avgConv = validCount > 0 ? Math.round((convSum / validCount) * 100) / 100 : 0;
+  const goodRate = validCount > 0 ? Math.round((goodCount / validCount) * 100) : 0;
+  
+  // 找数据日期范围
+  let datePeriod = '';
+  const dates = promoRecords.map(r => r['数据日期'] || r['日期'] || '').filter(d => d);
+  if (dates.length > 0) {
+    const uniqueDates = [...new Set(dates)].sort();
+    if (uniqueDates.length === 1) datePeriod = String(uniqueDates[0]).substring(0, 10);
+    else datePeriod = String(uniqueDates[0]).substring(0, 10) + ' ~ ' + String(uniqueDates[uniqueDates.length-1]).substring(0, 10);
+  }
+  
+  processed['promo_quality'] = {
+    kpis: {
+      count: validCount,
+      total_impressions: Math.round(totalImpressions),
+      total_clicks: Math.round(totalClicks),
+      total_spend: Math.round(totalSpend),
+      total_sales: Math.round(totalSales),
+      avg_ctr: avgCtr,
+      avg_cpc: avgCpc,
+      avg_roi: avgRoi,
+      avg_conv_rate: avgConv,
+      good_count: goodCount,
+      good_rate: goodRate,
+      need_optimize: needOptimizeCount
+    },
+    items: promoItems,
+    date_period: datePeriod
+  };
+  console.log(`  推广质检数据: ${validCount} 条 (${needOptimizeCount} 条待优化)`);
 
   // Scheduled tasks
   processed['scheduled_tasks'] = {

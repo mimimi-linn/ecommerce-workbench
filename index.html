@@ -1425,7 +1425,7 @@ var SubPages = {
     'monthly-profit':  { group: '销售数据总览', title: '月度毛利 & 费比汇总报表' },
     'pending-test':    { group: '商品爆款全流程管控', title: '链接活动在线情况' },
     'tracking-hot':    { group: '商品爆款全流程管控', title: '在途爆款追踪清单' },
-    'ztc-quality':     { group: '商品爆款全流程管控', title: '直通车质检投放清单' },
+    'ztc-quality':     { group: '商品爆款全流程管控', title: '推广质检投放清单' },
     'bad-review':      { group: '商品爆款全流程管控', title: '差评风控待处理台账' },
     'price-abnormal':  { group: '商品爆款全流程管控', title: '异常价格管控台账' },
     'channel-archive': { group: '渠道与资产管控', title: '全渠道商品档案总表' },
@@ -3181,54 +3181,177 @@ var SubPages = {
     '</div>';
   },
 
-  // ---------- 7. 直通车质检投放清单 ----------
+  // ---------- 7. 推广质检投放清单 ----------
   page_ztc_quality: function() {
-    return '' +
-    '<div class="sp-kpi-grid">' +
-      this.kpi('投放计划数', '15', 'flat', '稳定'),
-      this.kpi('日总花费', '¥18,500', 'up', '▲ 3.2%'),
-      this.kpi('总点击量', '8,250', 'up', '▲ 5.1%'),
-      this.kpi('平均CPC', '¥2.24', 'down', '▼ 0.3%'),
-      this.kpi('平均CTR', '3.8%', 'up', '▲ 0.2%'),
-      this.kpi('平均ROI', '4.2', 'down', '▼ 0.1'),
-      this.kpi('质量分≥10占比', '68%', 'up', '▲ 5%'),
-      this.kpi('待优化计划', '4', 'flat', '需关注'),
-    '</div>' +
+    var self = this;
+    var D = window.FEISHU_DATA;
 
-    '<div class="sp-section">' +
-      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>直通车计划质检</div>' +
+    // 检查飞书数据是否存在
+    if (!D || !D.promo_quality) {
+      return '<div class="sp-info-banner warn" style="margin-top:16px">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>' +
+        '推广数据未加载，请先执行数据同步。' +
+      '</div>';
+    }
+
+    var pq = D.promo_quality;
+    var items = pq.items || [];
+    var kpis = pq.kpis || {};
+    var datePeriod = pq.date_period || '';
+
+    // 格式化金额
+    var fmtYuan = function(v) {
+      var n = Math.round(v);
+      return '¥' + n.toLocaleString('zh-CN');
+    };
+    var fmtPct = function(v) {
+      return (Math.round(v * 100) / 100) + '%';
+    };
+    var fmtNum = function(v) {
+      return Math.round(v).toLocaleString('zh-CN');
+    };
+    // 截取商品名（最多20字）
+    var shortName = function(name) {
+      if (!name) return '-';
+      return name.length > 20 ? name.substring(0, 20) + '...' : name;
+    };
+
+    // KPI 区域
+    var kpiHtml = '<div class="sp-kpi-grid">' +
+      this.kpi('投放主体数', String(kpis.count || 0), 'flat', datePeriod ? '周期: ' + datePeriod : '') +
+      this.kpi('总花费', fmtYuan(kpis.total_spend || 0), 'flat', '') +
+      this.kpi('总点击量', fmtNum(kpis.total_clicks || 0), 'flat', '') +
+      this.kpi('平均CPC', '¥' + (kpis.avg_cpc || 0).toFixed(2), 'flat', '') +
+      this.kpi('平均CTR', fmtPct(kpis.avg_ctr || 0), 'flat', '') +
+      this.kpi('平均ROI', (kpis.avg_roi || 0).toFixed(2), 'flat', '') +
+      this.kpi('优质占比', (kpis.good_rate || 0) + '%', 'flat', '') +
+      this.kpi('待优化', String(kpis.need_optimize || 0), kpis.need_optimize > 0 ? 'up' : 'flat', kpis.need_optimize > 0 ? '需关注' : '正常') +
+    '</div>';
+
+    // 推广计划质检表
+    var tableRows = '';
+    for (var i = 0; i < items.length; i++) {
+      var r = items[i];
+      var rowClass = r.quality_tag === 'red' ? ' class="risk-row"' : '';
+      tableRows += '<tr' + rowClass + '>' +
+        '<td title="' + (r.subject_name || '').replace(/"/g, '&quot;') + '">' + shortName(r.subject_name) + '</td>' +
+        '<td>' + (r.owner || '-') + '</td>' +
+        '<td>' + fmtNum(r.impressions) + '</td>' +
+        '<td>' + fmtNum(r.clicks) + '</td>' +
+        '<td>' + fmtPct(r.ctr) + '</td>' +
+        '<td class="col-money">' + fmtYuan(r.spend) + '</td>' +
+        '<td>¥' + r.cpc.toFixed(2) + '</td>' +
+        '<td>' + (r.roi || 0).toFixed(2) + '</td>' +
+        '<td>' + fmtPct(r.conv_rate) + '</td>' +
+        '<td>' + fmtYuan(r.total_sales) + '</td>' +
+        '<td><span class="sp-tag ' + r.quality_tag + '">' + r.quality_status + '</span></td>' +
+      '</tr>';
+    }
+    if (items.length === 0) {
+      tableRows = '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--muted)">暂无推广数据</td></tr>';
+    }
+
+    var qualityTable = '<div class="sp-section">' +
+      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>推广计划质检</div>' +
       '<div class="sp-section-body">' +
         '<table class="sp-table">' +
-          '<thead><tr><th>计划名称</th><th>推广商品</th><th>日预算</th><th>日花费</th><th>展现量</th><th>点击量</th><th>CTR</th><th>CPC</th><th>质量分</th><th>ROI</th><th>质检状态</th></tr></thead>' +
-          '<tbody>' +
-            '<tr><td>防晒衣-核心词</td><td>夏季冰丝防晒衣</td><td class="col-money">¥3,000</td><td class="col-money">¥2,850</td><td>125,000</td><td>5,200</td><td>4.16%</td><td>¥0.55</td><td><span class="sp-tag green">10/10</span></td><td>5.8</td><td><span class="sp-tag green">优质</span></td></tr>' +
-            '<tr><td>防晒衣-长尾词</td><td>夏季冰丝防晒衣</td><td class="col-money">¥1,500</td><td class="col-money">¥1,200</td><td>68,000</td><td>2,100</td><td>3.09%</td><td>¥0.57</td><td><span class="sp-tag green">9/10</span></td><td>4.5</td><td><span class="sp-tag green">正常</span></td></tr>' +
-            '<tr><td>小风扇-品牌词</td><td>便携折叠小风扇</td><td class="col-money">¥2,500</td><td class="col-money">¥2,300</td><td>95,000</td><td>3,800</td><td>4.00%</td><td>¥0.61</td><td><span class="sp-tag green">10/10</span></td><td>5.2</td><td><span class="sp-tag green">优质</span></td></tr>' +
-            '<tr class="risk-row"><td>凉感T恤-核心词</td><td>冰感凉感T恤</td><td class="col-money">¥2,000</td><td class="col-money">¥1,800</td><td>85,000</td><td>2,500</td><td>2.94%</td><td>¥0.72</td><td><span class="sp-tag yellow">7/10</span></td><td>2.1</td><td><span class="sp-tag red">⚠ 待优化</span></td></tr>' +
-            '<tr class="risk-row"><td>凉感T恤-广泛匹配</td><td>冰感凉感T恤</td><td class="col-money">¥1,000</td><td class="col-money">¥950</td><td>42,000</td><td>980</td><td>2.33%</td><td>¥0.97</td><td><span class="sp-tag red">5/10</span></td><td>1.5</td><td><span class="sp-tag red">⚠ 待优化</span></td></tr>' +
-            '<tr><td>泳帽-精准匹配</td><td>硅胶泳帽套装</td><td class="col-money">¥1,500</td><td class="col-money">¥1,350</td><td>58,000</td><td>1,900</td><td>3.28%</td><td>¥0.71</td><td><span class="sp-tag green">9/10</span></td><td>4.8</td><td><span class="sp-tag green">正常</span></td></tr>' +
-            '<tr><td>运动短裤-核心词</td><td>速干运动短裤</td><td class="col-money">¥1,500</td><td class="col-money">¥1,400</td><td>62,000</td><td>1,750</td><td>2.82%</td><td>¥0.80</td><td><span class="sp-tag yellow">7/10</span></td><td>3.5</td><td><span class="sp-tag yellow">关注</span></td></tr>' +
-            '<tr class="risk-row"><td>配饰-广泛匹配</td><td>羊毛围巾</td><td class="col-money">¥800</td><td class="col-money">¥780</td><td>28,000</td><td>420</td><td>1.50%</td><td>¥1.86</td><td><span class="sp-tag red">4/10</span></td><td>0.8</td><td><span class="sp-tag red">⚠ 待优化</span></td></tr>' +
-            '<tr><td>冰袖-精准匹配</td><td>防晒冰袖臂套</td><td class="col-money">¥1,200</td><td class="col-money">¥820</td><td>35,000</td><td>1,100</td><td>3.14%</td><td>¥0.75</td><td><span class="sp-tag green">9/10</span></td><td>5.5</td><td><span class="sp-tag green">正常</span></td></tr>' +
-          '</tbody>' +
-        '</table>' +
-      '</div>' +
-    '</div>' +
-
-    '<div class="sp-section">' +
-      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>优化建议</div>' +
-      '<div class="sp-section-body">' +
-        '<table class="sp-table">' +
-          '<thead><tr><th>计划名称</th><th>问题诊断</th><th>优化建议</th><th>预计效果</th><th>优先级</th></tr></thead>' +
-          '<tbody>' +
-            '<tr class="risk-row"><td>凉感T恤-核心词</td><td>CTR偏低(2.94%)，CPC偏高(¥0.72)，质量分仅7</td><td>优化主图提升CTR，删除低分关键词，增加精准长尾词</td><td>ROI提升至3.5+</td><td><span class="sp-tag red">P0</span></td></tr>' +
-            '<tr class="risk-row"><td>凉感T恤-广泛匹配</td><td>ROI仅1.5，CPC高达¥0.97，严重浪费预算</td><td>暂停广泛匹配，改为精准匹配，降低出价30%</td><td>节省¥300/天</td><td><span class="sp-tag red">P0</span></td></tr>' +
-            '<tr><td>配饰-广泛匹配</td><td>ROI仅0.8，质量分4，点击率极低</td><td>建议暂停该计划，配饰类不适合直通车推广</td><td>节省¥780/天</td><td><span class="sp-tag yellow">P1</span></td></tr>' +
-            '<tr><td>运动短裤-核心词</td><td>CTR偏低，质量分7，有提升空间</td><td>A/B测试新主图，优化标题关键词</td><td>CTR提升至3.5%+</td><td><span class="sp-tag yellow">P1</span></td></tr>' +
-          '</tbody>' +
+          '<thead><tr><th>推广商品</th><th>负责人</th><th>展现量</th><th>点击量</th><th>CTR</th><th>花费</th><th>CPC</th><th>ROI</th><th>转化率</th><th>成交金额</th><th>质检状态</th></tr></thead>' +
+          '<tbody>' + tableRows + '</tbody>' +
         '</table>' +
       '</div>' +
     '</div>';
+
+    // 优化建议（基于实际数据自动生成）
+    var suggestions = [];
+    for (var j = 0; j < items.length; j++) {
+      var it = items[j];
+      var problems = [];
+      var advice = [];
+      var expected = [];
+      var priority = 'P2';
+
+      if (it.roi < 1.5) {
+        problems.push('ROI仅' + it.roi.toFixed(2) + '，投入产出比偏低');
+        advice.push('建议暂停或降低出价，优化关键词精准度');
+        expected.push('ROI提升至2+');
+        priority = 'P0';
+      }
+      if (it.ctr < 2 && it.impressions > 1000) {
+        problems.push('CTR偏低(' + it.ctr.toFixed(2) + '%)');
+        advice.push('优化主图和标题，提升点击吸引力');
+        expected.push('CTR提升至3%+');
+        if (priority === 'P2') priority = 'P1';
+      }
+      if (it.cpc > 1.5 && it.spend > 500) {
+        problems.push('CPC偏高(¥' + it.cpc.toFixed(2) + ')');
+        advice.push('降低出价，删除高价低转关键词');
+        expected.push('CPC降低30%');
+        if (priority === 'P2') priority = 'P1';
+      }
+      if (it.conv_rate < 3 && it.clicks > 500) {
+        problems.push('转化率偏低(' + it.conv_rate.toFixed(2) + '%)');
+        advice.push('优化详情页，提升商品转化能力');
+        expected.push('转化率提升至4%+');
+        if (priority === 'P2') priority = 'P1';
+      }
+      if (it.spend > 1000 && it.total_sales < it.spend) {
+        if (problems.length === 0) {
+          problems.push('花费(¥' + Math.round(it.spend) + ')高于成交金额(¥' + Math.round(it.total_sales) + ')，亏损投放');
+          advice.push('建议暂停或大幅降低预算');
+          expected.push('节省¥' + Math.round(it.spend) + '/周期');
+          priority = 'P0';
+        }
+      }
+
+      if (problems.length > 0) {
+        var tagColor = priority === 'P0' ? 'red' : (priority === 'P1' ? 'yellow' : 'gray');
+        suggestions.push({
+          name: it.subject_name,
+          owner: it.owner,
+          problems: problems.join('；'),
+          advice: advice.join('；'),
+          expected: expected.join('；'),
+          priority: priority,
+          tagColor: tagColor,
+          spend: it.spend
+        });
+      }
+    }
+    // 按优先级和花费排序
+    var pOrder = { 'P0': 0, 'P1': 1, 'P2': 2 };
+    suggestions.sort(function(a, b) {
+      if (pOrder[a.priority] !== pOrder[b.priority]) return pOrder[a.priority] - pOrder[b.priority];
+      return b.spend - a.spend;
+    });
+
+    var sugRows = '';
+    for (var k = 0; k < suggestions.length; k++) {
+      var s = suggestions[k];
+      var sRowClass = s.tagColor === 'red' ? ' class="risk-row"' : '';
+      sugRows += '<tr' + sRowClass + '>' +
+        '<td title="' + s.name.replace(/"/g, '&quot;') + '">' + shortName(s.name) + '</td>' +
+        '<td>' + (s.owner || '-') + '</td>' +
+        '<td>' + s.problems + '</td>' +
+        '<td>' + s.advice + '</td>' +
+        '<td>' + s.expected + '</td>' +
+        '<td><span class="sp-tag ' + s.tagColor + '">' + s.priority + '</span></td>' +
+      '</tr>';
+    }
+    if (suggestions.length === 0) {
+      sugRows = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">暂无优化建议，所有推广计划运行良好</td></tr>';
+    }
+
+    var suggestionTable = '<div class="sp-section">' +
+      '<div class="sp-section-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>优化建议</div>' +
+      '<div class="sp-section-body">' +
+        '<table class="sp-table">' +
+          '<thead><tr><th>推广商品</th><th>负责人</th><th>问题诊断</th><th>优化建议</th><th>预计效果</th><th>优先级</th></tr></thead>' +
+          '<tbody>' + sugRows + '</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</div>';
+
+    return kpiHtml + qualityTable + suggestionTable;
   },
 
   // ---------- 8. 差评风控待处理台账 ----------

@@ -156,12 +156,12 @@ function processDashboard(dailyRecords, targetRecords) {
   const dashboardByOwner = {};
   for (const owner of owners) {
     const records = (byOwner[owner] || []).sort((a, b) => {
-      return String(b['数据日期'] || '').localeCompare(String(a['数据日期'] || ''));
+      const aTs = Number(a['数据日期']) || 0; const bTs = Number(b['数据日期']) || 0; return bTs - aTs;
     });
     if (records.length === 0) continue;
 
     const latest = records[0];
-    const dataDate = String(latest['数据日期'] || '').substring(0, 10);
+    const dataDate = tsToDate(latest['数据日期']);
 
     const dailySales = records.reduce((s, r) => s + num(r['支付金额']), 0);
     const dailyProfit = records.reduce((s, r) => s + num(r['商品毛利_预估']), 0);
@@ -190,7 +190,7 @@ function processDashboard(dailyRecords, targetRecords) {
 
     const dailyAgg = {};
     for (const r of (byOwner[owner] || [])) {
-      const dt = String(r['数据日期'] || '').substring(0, 10);
+      const dt = tsToDate(r['数据日期']);
       if (!dt || dt === 'None') continue;
       if (!dailyAgg[dt]) dailyAgg[dt] = { sales: 0, profit: 0 };
       dailyAgg[dt].sales += num(r['支付金额']);
@@ -342,31 +342,31 @@ async function main() {
   let ctrSum = 0, roiSum = 0, cpcSum = 0, convSum = 0;
   
   for (const r of promoRecords) {
-    const subjectName = r['推广主体名称'] || r['商品名称'] || '';
+    const subjectName = r['主体名称'] || r['推广主体名称'] || r['商品名称'] || '';
     if (!subjectName || subjectName === '合计' || subjectName === '总计') continue;
     const impressions = num(r['展现量']);
     const clicks = num(r['点击量']);
     const spend = num(r['花费']);
     const roi = num(r['投入产出比']);
-    const totalSalesVal = num(r['成交金额']);
+    const totalSalesVal = num(r['总成交金额'] || r['成交金额']);
     
     // 跳过无数据行
     if (impressions === 0 && clicks === 0 && spend === 0) continue;
     
-    // CTR - 可能是百分比字符串或小数
+    // CTR - field is decimal (0.03 = 3%), convert to percentage
     let ctr = num(r['点击率']);
-    if (ctr < 1 && String(r['点击率'] || '').includes('%')) ctr = ctr * 100;
-    if (ctr < 1 && impressions > 0) ctr = (clicks / impressions) * 100;
+    if (ctr > 0 && ctr < 1) ctr = ctr * 100;  // decimal to percentage
+    else if (ctr === 0 && impressions > 0) ctr = (clicks / impressions) * 100;
     
     // CPC
     let cpc = num(r['平均点击花费']);
     if (cpc === 0 && clicks > 0) cpc = spend / clicks;
     
-    // 转化率
-    let convRate = num(r['转化率']);
-    if (convRate < 1 && String(r['转化率'] || '').includes('%')) convRate = convRate * 100;
-    if (convRate === 0 && clicks > 0) {
-      const orderCount = num(r['成交笔数'] || r['成交订单数'] || 0);
+    // Conversion rate - field is 点击转化率, stored as decimal
+    let convRate = num(r['点击转化率'] || r['转化率']);
+    if (convRate > 0 && convRate < 1) convRate = convRate * 100;  // decimal to percentage
+    else if (convRate === 0 && clicks > 0) {
+      const orderCount = num(r['总成交笔数'] || r['成交笔数'] || 0);
       if (orderCount > 0) convRate = (orderCount / clicks) * 100;
     }
     

@@ -112,9 +112,8 @@ async function fetchTableRecords(token, tableId, tableName) {
       for (const [key, val] of Object.entries(item.fields)) {
         record[key] = normalizeValue(val);
       }
-      if (item.fields['数据日期'] && typeof item.fields['数据日期'] === 'number') {
-        record['数据日期'] = tsToDate(item.fields['数据日期']);
-      }
+      // 数据日期保持原始时间戳，在 processDashboard 中统一转换
+
       record._record_id = item.record_id;
       allRecords.push(record);
     }

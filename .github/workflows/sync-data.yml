@@ -10,7 +10,11 @@ on:
   repository_dispatch:
     types: [sync-data]
   schedule:
-    - cron: '45 6 * * MON-FRI'
+    # 北京时间 09:00, 13:00, 18:00, 22:00 每天执行（增加频率，避免单次漏执行）
+    - cron: '0 1 * * *'   # 09:00 Beijing
+    - cron: '0 5 * * *'   # 13:00 Beijing
+    - cron: '0 10 * * *'  # 18:00 Beijing
+    - cron: '0 14 * * *'  # 22:00 Beijing
 
 jobs:
   sync:
@@ -21,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,6 +41,8 @@ jobs:
           node scripts/sync.js
 
       - name: Commit and push changes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -43,6 +51,15 @@ jobs:
             echo "没有数据变更，跳过提交"
           else
             git commit -m "Auto sync: $(date '+%Y-%m-%d %H:%M:%S' -d '+8 hours')"
-            git push
-            echo "数据已更新并推送"
+            # 重试3次，避免并发推送冲突
+            for i in 1 2 3; do
+              git pull --rebase origin main 2>/dev/null || true
+              if git push origin main; then
+                echo "数据已更新并推送"
+                break
+              else
+                echo "推送失败，第${i}次重试..."
+                sleep 5
+              fi
+            done
           fi
